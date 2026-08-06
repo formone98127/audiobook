@@ -41,3 +41,10 @@ example
 # generated native folders
 /ios
 /android
+
+# debug screenshots and dumps
+*.png
+*.xml
+*.json.txt
+metro_ui_log.txt
+exgo_versions.json
