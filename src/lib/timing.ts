@@ -2,11 +2,13 @@ import type { TimingsJson } from './types';
 
 export class TimingIndex {
   private sentStart: number[] = [];
+  /** sorted-rank → original sentence index (only sentences with real spans) */
+  private sentIndexByRank: number[] = [];
   private wordsBySentence = new Map<number, { start: number; end: number }[]>();
+  /** Word starts in sentence-major flat order (matches RSVP token stream). */
+  private flatStarts: number[] = [];
 
   constructor(json: TimingsJson) {
-    const sorted = [...json.sentences].sort((a, b) => a[1] - b[1]);
-    for (const [, start] of sorted) this.sentStart.push(start);
     for (const [si, wi, start, end] of json.words) {
       let arr = this.wordsBySentence.get(si);
       if (!arr) {
@@ -15,32 +17,56 @@ export class TimingIndex {
       }
       arr[wi] = { start, end };
     }
+
+    const usable = [...json.sentences]
+      .filter(([, start, end]) => end > start + 1e-6)
+      .sort((a, b) => a[1] - b[1]);
+    this.sentStart = usable.map(([, start]) => start);
+    this.sentIndexByRank = usable.map(([si]) => si);
+
+    const maxSi = Math.max(-1, ...[...this.wordsBySentence.keys()]);
+    for (let si = 0; si <= maxSi; si++) {
+      const arr = this.wordsBySentence.get(si);
+      if (!arr) continue;
+      for (let wi = 0; wi < arr.length; wi++) {
+        if (arr[wi]) this.flatStarts.push(arr[wi].start);
+      }
+    }
   }
 
   get sentenceCount(): number {
     return this.sentStart.length;
   }
 
-  /** Last sentence whose start <= t, or -1 before the first sentence. */
+  /** Original sentence index whose start <= t, or -1. */
   sentenceAt(t: number): number {
     let lo = 0;
     let hi = this.sentStart.length - 1;
-    let ans = -1;
+    let rank = -1;
     while (lo <= hi) {
       const mid = (lo + hi) >> 1;
       if (this.sentStart[mid] <= t) {
-        ans = mid;
+        rank = mid;
         lo = mid + 1;
       } else {
         hi = mid - 1;
       }
     }
-    return ans;
+    if (rank < 0) return -1;
+    return this.sentIndexByRank[rank] ?? -1;
   }
 
   sentenceStartOf(i: number): number {
-    const clamped = Math.max(0, Math.min(i, this.sentStart.length - 1));
-    return this.sentStart[clamped];
+    // i is original sentence index — find its start from words or sent table
+    const arr = this.wordsBySentence.get(i);
+    if (arr) {
+      for (let wi = 0; wi < arr.length; wi++) {
+        if (arr[wi]) return arr[wi].start;
+      }
+    }
+    const rank = this.sentIndexByRank.indexOf(i);
+    if (rank >= 0) return this.sentStart[rank];
+    return 0;
   }
 
   /** Last word in the sentence whose start <= t, or -1. */
@@ -68,40 +94,37 @@ export class TimingIndex {
   }
 
   get totalWords(): number {
-    let n = 0;
-    for (let si = 0; si < this.sentenceCount; si++) n += this.sentenceWordCount(si);
-    return n;
+    return this.flatStarts.length;
   }
 
-  /** Global word index (sentence-major) for time t.
-   *  Negative lead delays the flash slightly so it doesn't outrun speech. */
+  /**
+   * Flat word index for time t (sentence-major order).
+   * leadSec shifts lookup — negative delays flash behind audio.
+   */
   flatWordAt(t: number, leadSec = -0.15): number {
     const tt = Math.max(0, t + leadSec);
-    const si = this.sentenceAt(tt);
-    if (si < 0) return 0;
-    let base = 0;
-    for (let i = 0; i < si; i++) base += this.sentenceWordCount(i);
-    const wi = this.wordAt(si, tt);
-    return base + Math.max(0, wi);
+    const starts = this.flatStarts;
+    if (starts.length === 0) return 0;
+    let lo = 0;
+    let hi = starts.length - 1;
+    let ans = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (starts[mid] <= tt) {
+        ans = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    // Before first word starts, stay on 0
+    if (tt < starts[0]) return 0;
+    return ans;
   }
 
   /** Start time of the flat-th timed word, or null. */
   timeAtFlatWord(flat: number): number | null {
-    let remaining = Math.max(0, Math.floor(flat));
-    for (let si = 0; si < this.sentenceCount; si++) {
-      const arr = this.wordsBySentence.get(si);
-      const count = this.sentenceWordCount(si);
-      if (remaining < count && arr) {
-        let seen = 0;
-        for (let wi = 0; wi < arr.length; wi++) {
-          if (!arr[wi]) continue;
-          if (seen === remaining) return arr[wi].start;
-          seen++;
-        }
-        return this.sentenceStartOf(si);
-      }
-      remaining -= count;
-    }
-    return null;
+    if (flat < 0 || flat >= this.flatStarts.length) return null;
+    return this.flatStarts[flat] ?? null;
   }
 }

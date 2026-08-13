@@ -147,9 +147,8 @@ def build_timings_from_bounds(
     for si in range(len(sents)):
         rows = by_sent.get(si, [])
         if not rows:
-            sentences_json.append([si, 0.0, 0.0])
-        else:
-            sentences_json.append([si, rows[0][2], rows[-1][3]])
+            continue  # skip empty / illustration-only sentences
+        sentences_json.append([si, rows[0][2], rows[-1][3]])
 
     return {"chapter": chapter["index"], "sentences": sentences_json, "words": words_json}
 
