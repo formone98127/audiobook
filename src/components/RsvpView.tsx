@@ -245,7 +245,7 @@ export function RsvpView({
   return (
     <View style={styles.root}>
       <Pressable style={styles.stage} onPress={togglePlay}>
-        <Text style={[styles.chunk, { fontSize: fontSize * 1.8, lineHeight: fontSize * 2.4 }]}>
+        <Text style={[styles.chunk, { fontSize: fontSize * 3.6, lineHeight: fontSize * 4.8 }]}>
           {total === 0 ? 'No text' : display || '✓'}
         </Text>
         <Text style={styles.hint}>
