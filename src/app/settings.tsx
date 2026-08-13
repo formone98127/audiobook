@@ -80,6 +80,16 @@ export default function Settings() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Reading Speed (RSVP)</Text>
+        <Pressable
+          style={[styles.btn, rsvp.audioSync && styles.btnPush]}
+          onPress={() => patchRsvp({ audioSync: !rsvp.audioSync })}
+        >
+          <Text style={styles.btnText}>
+            Audio Sync {rsvp.audioSync ? 'On' : 'Off'}
+          </Text>
+        </Pressable>
+        <Text style={styles.label}>When on, RSVP follows narration word timings (LAN books).</Text>
+
         <View style={styles.row}>
           <Pressable style={styles.btn} onPress={() => bumpWpm('wpm', -WPM_STEP)}>
             <Text style={styles.btnText}>−</Text>

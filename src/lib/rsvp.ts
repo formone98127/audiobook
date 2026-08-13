@@ -19,6 +19,32 @@ export function tokensFromChapter(chapter: BookChapter | undefined, language?: s
   return tokenize(full, language);
 }
 
+/**
+ * Tokens ordered to match forced-aligner word timings:
+ * per-sentence whitespace words (EN) or per-char (CJK).
+ */
+export function alignmentTokensFromChapter(
+  chapter: BookChapter | undefined,
+  language?: string,
+): string[] {
+  if (!chapter) return [];
+  const forceCjk =
+    !!language && /^(zh|ja|ko|chinese|japanese|korean)/i.test(language.trim());
+  const out: string[] = [];
+  for (const p of chapter.paragraphs) {
+    for (const s of p.sentences) {
+      const t = s.text.trim();
+      if (!t) continue;
+      if (forceCjk || CJK_RE.test(t)) {
+        out.push(...tokenizeCjk(t));
+      } else {
+        out.push(...t.split(/\s+/).filter(Boolean));
+      }
+    }
+  }
+  return out;
+}
+
 export function tokenize(text: string, language?: string): string[] {
   const forceCjk =
     !!language && /^(zh|ja|ko|chinese|japanese|korean)/i.test(language.trim());

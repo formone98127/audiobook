@@ -6,7 +6,13 @@ Expo app with **RSVP speed reading** (ReadCoach-style) and **Audio** mode. Karao
 
 After the first successful deploy: **https://formone98127.github.io/audiobook/**
 
-Static demo books ship under `public/books/` (Alice + 唐詩選). Audio mode needs a real media host — point `EXPO_PUBLIC_SERVER` at your pipeline for full catalog + audio.
+Static demo books ship under `public/books/` (Alice + 唐詩選) **with TTS audio + word timings**, so RSVP **Audio Sync** works on Pages. Regenerate with:
+
+```bash
+python scripts/generate-demo-audio.py
+```
+
+Full catalog + pipeline audio still needs `EXPO_PUBLIC_SERVER` or the LAN host.
 
 ## Run locally
 

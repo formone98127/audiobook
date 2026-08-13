@@ -10,6 +10,17 @@ import {
 } from '@/lib/rsvp';
 import type { RsvpSettings } from '@/lib/storage';
 
+export type RsvpAudioSync = {
+  available: boolean;
+  active: boolean;
+  externalIndex: number;
+  playing: boolean;
+  speedLabel: string;
+  onToggle: () => void;
+  onPlayPause: () => void;
+  onCycleSpeed: () => void;
+};
+
 type Props = {
   tokens: string[];
   settings: RsvpSettings;
@@ -19,6 +30,7 @@ type Props = {
   initialIndex?: number;
   fontSize: number;
   chapterKey: string;
+  audioSync?: RsvpAudioSync;
 };
 
 const WPM_STEP = 25;
@@ -32,7 +44,9 @@ export function RsvpView({
   initialIndex = 0,
   fontSize,
   chapterKey,
+  audioSync,
 }: Props) {
+  const syncing = !!(audioSync?.active && audioSync.available);
   const [index, setIndex] = useState(() => clampIndex(initialIndex, tokens.length));
   const [playing, setPlaying] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -50,6 +64,12 @@ export function RsvpView({
   settingsRef.current = settings;
   tokensRef.current = tokens;
 
+  // Follow audio word index when syncing
+  useEffect(() => {
+    if (!syncing) return;
+    setIndex(clampIndex(audioSync!.externalIndex, tokens.length));
+  }, [syncing, audioSync?.externalIndex, tokens.length]);
+
   // Reset when chapter changes
   useEffect(() => {
     completedRef.current = false;
@@ -65,7 +85,37 @@ export function RsvpView({
     onProgress(index);
   }, [index, onProgress]);
 
+  // Detect end in sync mode
   useEffect(() => {
+    if (!syncing || !audioSync) return;
+    if (
+      audioSync.playing === false &&
+      tokens.length > 0 &&
+      audioSync.externalIndex >= tokens.length - 1 &&
+      !completedRef.current
+    ) {
+      // parent fires chapter complete on audio end; no-op here
+    }
+  }, [syncing, audioSync, tokens.length]);
+
+  useEffect(() => {
+    if (syncing) {
+      clearTimer();
+      if (elapsedRef.current) {
+        clearInterval(elapsedRef.current);
+        elapsedRef.current = null;
+      }
+      if (audioSync?.playing) {
+        elapsedRef.current = setInterval(() => setElapsedSec((s) => s + 1), 1000);
+      }
+      return () => {
+        if (elapsedRef.current) {
+          clearInterval(elapsedRef.current);
+          elapsedRef.current = null;
+        }
+      };
+    }
+
     if (!playing) {
       clearTimer();
       if (elapsedRef.current) {
@@ -86,7 +136,17 @@ export function RsvpView({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, settings.wpm, settings.chunkSize, settings.pushMode, settings.startWpm, settings.targetWpm, chapterKey]);
+  }, [
+    syncing,
+    playing,
+    audioSync?.playing,
+    settings.wpm,
+    settings.chunkSize,
+    settings.pushMode,
+    settings.startWpm,
+    settings.targetWpm,
+    chapterKey,
+  ]);
 
   function clearTimer() {
     if (timerRef.current) {
@@ -148,6 +208,7 @@ export function RsvpView({
   });
   const remaining = Math.max(0, total - index);
   const eta = formatEta(remaining, currentWpm);
+  const isPlaying = syncing ? !!audioSync?.playing : playing;
 
   const patch = (partial: Partial<RsvpSettings>) => {
     onSettingsChange({ ...settings, ...partial });
@@ -173,13 +234,24 @@ export function RsvpView({
     patch({ [field]: next });
   };
 
+  const togglePlay = () => {
+    if (syncing && audioSync) {
+      audioSync.onPlayPause();
+      return;
+    }
+    setPlaying((p) => !p);
+  };
+
   return (
     <View style={styles.root}>
-      <Pressable style={styles.stage} onPress={() => setPlaying((p) => !p)}>
+      <Pressable style={styles.stage} onPress={togglePlay}>
         <Text style={[styles.chunk, { fontSize: fontSize * 1.8, lineHeight: fontSize * 2.4 }]}>
           {total === 0 ? 'No text' : display || '✓'}
         </Text>
-        <Text style={styles.hint}>{playing ? 'Tap to pause' : 'Tap to play'}</Text>
+        <Text style={styles.hint}>
+          {isPlaying ? 'Tap to pause' : 'Tap to play'}
+          {syncing ? ' · + audio' : ''}
+        </Text>
       </Pressable>
 
       <View style={styles.progressBlock}>
@@ -188,22 +260,43 @@ export function RsvpView({
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
           </View>
-          <Text style={styles.dim}>{eta} left</Text>
+          <Text style={styles.dim}>{syncing ? '' : `${eta} left`}</Text>
         </View>
         <Text style={styles.meta}>
-          {Math.min(index, total)} / {total} · {Math.round(currentWpm)} WPM
-          {settings.pushMode ? ' · Push' : ''} · {fmtElapsed(elapsedSec)}
+          {Math.min(index, total)} / {total}
+          {syncing
+            ? ` · ${audioSync?.speedLabel ?? '1×'} · Sync`
+            : ` · ${Math.round(currentWpm)} WPM${settings.pushMode ? ' · Push' : ''}`}
+          {' · '}
+          {fmtElapsed(elapsedSec)}
         </Text>
       </View>
 
       <View style={styles.controls}>
-        <Pressable style={styles.btn} onPress={() => bumpWpm(-WPM_STEP)}>
-          <Text style={styles.btnText}>−</Text>
-        </Pressable>
-        <Text style={styles.wpmLabel}>{settings.wpm}</Text>
-        <Pressable style={styles.btn} onPress={() => bumpWpm(WPM_STEP)}>
-          <Text style={styles.btnText}>+</Text>
-        </Pressable>
+        {audioSync && (
+          <Pressable
+            style={[styles.btn, audioSync.active && styles.btnSync]}
+            onPress={audioSync.onToggle}
+          >
+            <Text style={styles.btnText}>🔊</Text>
+          </Pressable>
+        )}
+
+        {syncing ? (
+          <Pressable style={styles.btn} onPress={audioSync?.onCycleSpeed}>
+            <Text style={styles.btnText}>{audioSync?.speedLabel ?? '1×'}</Text>
+          </Pressable>
+        ) : (
+          <>
+            <Pressable style={styles.btn} onPress={() => bumpWpm(-WPM_STEP)}>
+              <Text style={styles.btnText}>−</Text>
+            </Pressable>
+            <Text style={styles.wpmLabel}>{settings.wpm}</Text>
+            <Pressable style={styles.btn} onPress={() => bumpWpm(WPM_STEP)}>
+              <Text style={styles.btnText}>+</Text>
+            </Pressable>
+          </>
+        )}
 
         {([1, 2, 3] as ChunkSize[]).map((n) => (
           <Pressable
@@ -215,22 +308,21 @@ export function RsvpView({
           </Pressable>
         ))}
 
-        <Pressable
-          style={[styles.btn, settings.pushMode && styles.btnPush]}
-          onPress={togglePush}
-        >
-          <Text style={styles.btnText}>Push</Text>
-        </Pressable>
+        {!syncing && (
+          <Pressable
+            style={[styles.btn, settings.pushMode && styles.btnPush]}
+            onPress={togglePush}
+          >
+            <Text style={styles.btnText}>Push</Text>
+          </Pressable>
+        )}
 
-        <Pressable
-          style={[styles.btn, styles.playBtn]}
-          onPress={() => setPlaying((p) => !p)}
-        >
-          <Text style={[styles.btnText, styles.playText]}>{playing ? '❚❚' : '▶'}</Text>
+        <Pressable style={[styles.btn, styles.playBtn]} onPress={togglePlay}>
+          <Text style={[styles.btnText, styles.playText]}>{isPlaying ? '❚❚' : '▶'}</Text>
         </Pressable>
       </View>
 
-      {settings.pushMode && (
+      {!syncing && settings.pushMode && (
         <View style={styles.pushRow}>
           <Pressable style={styles.btnSm} onPress={() => bumpPush('startWpm', -WPM_STEP)}>
             <Text style={styles.btnText}>−</Text>
@@ -313,6 +405,7 @@ const styles = StyleSheet.create({
   },
   btnActive: { backgroundColor: '#3A4555' },
   btnPush: { backgroundColor: '#5B3A8C' },
+  btnSync: { backgroundColor: '#2A5A3A' },
   btnText: { color: '#E8E6DF', fontSize: 14, fontWeight: '600' },
   playBtn: { backgroundColor: '#F5C518', minWidth: 56 },
   playText: { color: '#111111', fontSize: 16 },

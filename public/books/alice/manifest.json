@@ -2,21 +2,36 @@
   "id": "alice",
   "title": "Alice's Adventures in Wonderland",
   "language": "en",
-  "text": { "url": "text.json", "bytes": 0 },
+  "text": {
+    "url": "text.json",
+    "bytes": 0
+  },
   "chapters": [
     {
       "index": 0,
       "title": "I. Down the Rabbit-Hole",
-      "duration": 0,
-      "audio": { "url": "audio/ch000.mp3", "bytes": 0 },
-      "timings": { "url": "timings/ch000.json", "bytes": 0 }
+      "duration": 180.53,
+      "audio": {
+        "url": "audio/ch000.mp3",
+        "bytes": 1083734
+      },
+      "timings": {
+        "url": "timings/ch000.json",
+        "bytes": 15645
+      }
     },
     {
       "index": 1,
       "title": "II. The Pool of Tears",
-      "duration": 0,
-      "audio": { "url": "audio/ch001.mp3", "bytes": 0 },
-      "timings": { "url": "timings/ch001.json", "bytes": 0 }
+      "duration": 98.18,
+      "audio": {
+        "url": "audio/ch001.mp3",
+        "bytes": 589706
+      },
+      "timings": {
+        "url": "timings/ch001.json",
+        "bytes": 7886
+      }
     }
   ]
 }

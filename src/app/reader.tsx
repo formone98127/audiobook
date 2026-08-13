@@ -13,10 +13,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RsvpView } from '@/components/RsvpView';
-import { audioUrlFor, loadBook } from '@/lib/api';
+import { audioUrlFor, loadBook, loadTimings } from '@/lib/api';
 import { manifestUrlFor } from '@/lib/config';
 import { lookupWord } from '@/lib/dictionary';
-import { tokensFromChapter } from '@/lib/rsvp';
+import { alignmentTokensFromChapter, tokensFromChapter } from '@/lib/rsvp';
 import {
   loadFontSize,
   loadPosition,
@@ -33,6 +33,7 @@ import {
   type ReaderMode,
   type RsvpSettings,
 } from '@/lib/storage';
+import { TimingIndex } from '@/lib/timing';
 import type { BookChapter, BookText, Manifest } from '@/lib/types';
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -67,6 +68,9 @@ export default function ReaderScreen() {
   const [prefsReady, setPrefsReady] = useState(false);
   const [rsvpWordIndex, setRsvpWordIndex] = useState(0);
   const [audioReady, setAudioReady] = useState(false);
+  const [timings, setTimings] = useState<TimingIndex | null>(null);
+  const [syncAvailable, setSyncAvailable] = useState(false);
+  const [syncIndex, setSyncIndex] = useState(0);
 
   const player = useAudioPlayer(null, { updateInterval: 250 });
 
@@ -82,10 +86,12 @@ export default function ReaderScreen() {
 
   const [, setTick] = useState(0);
   useEffect(() => {
-    if (mode !== 'audio') return;
-    const id = setInterval(() => setTick((v) => v + 1), 250);
+    const needTick =
+      mode === 'audio' || (mode === 'rsvp' && !!rsvpSettings?.audioSync && syncAvailable);
+    if (!needTick) return;
+    const id = setInterval(() => setTick((v) => v + 1), 100);
     return () => clearInterval(id);
-  }, [mode]);
+  }, [mode, rsvpSettings?.audioSync, syncAvailable]);
 
   const speedRef = useRef(SPEEDS[1]);
   const wasPlayingRef = useRef(false);
@@ -108,19 +114,47 @@ export default function ReaderScreen() {
   }, [manifestUrl]);
 
   const openChapterRsvp = useCallback(
-    async (i: number, wordIndex = 0) => {
-      if (!book) return;
+    async (i: number, wordIndex = 0, withSync?: boolean): Promise<boolean> => {
+      if (!book) return false;
+      const wantSync = withSync ?? rsvpSettings?.audioSync ?? true;
       setLoadingChapter(true);
       setError(null);
+      setTimings(null);
+      setSyncAvailable(false);
       try {
         setChapterIdx(i);
         setRsvpWordIndex(wordIndex);
-        setAudioReady(false);
+        setSyncIndex(wordIndex);
+        if (!wantSync) {
+          try { player.pause(); } catch {}
+          setAudioReady(false);
+          return false;
+        }
+        try {
+          const tj = await loadTimings(manifestUrl, i, book.manifest);
+          const idx = new TimingIndex(tj);
+          setTimings(idx);
+          player.replace({ uri: audioUrlFor(manifestUrl, i, book.manifest) });
+          player.setPlaybackRate(speedRef.current);
+          const seekTo = idx.timeAtFlatWord(wordIndex) ?? 0;
+          setAudioReady(true);
+          setSyncAvailable(true);
+          setTimeout(() => {
+            player.seekTo(seekTo);
+            setBuffering(false);
+          }, 600);
+          return true;
+        } catch {
+          setSyncAvailable(false);
+          setAudioReady(false);
+          setTimings(null);
+          return false;
+        }
       } finally {
         setLoadingChapter(false);
       }
     },
-    [book],
+    [book, rsvpSettings?.audioSync, player, manifestUrl],
   );
 
   const openChapterAudio = useCallback(
@@ -201,6 +235,14 @@ export default function ReaderScreen() {
     savePosition(bookId, { chapterIdx, currentTime: t });
   }, [t, playing, duration, bookId, chapterIdx, mode]);
 
+  // Drive RSVP flash from audio word timings
+  useEffect(() => {
+    if (mode !== 'rsvp' || !rsvpSettings?.audioSync || !timings || !syncAvailable) return;
+    const flat = timings.flatWordAt(t);
+    setSyncIndex(flat);
+    setRsvpWordIndex(flat);
+  }, [t, mode, rsvpSettings?.audioSync, timings, syncAvailable]);
+
   useEffect(() => {
     if (mode !== 'audio') return;
     const finished = wasPlayingRef.current && !playing && duration > 0 && t >= duration - 0.3;
@@ -228,10 +270,13 @@ export default function ReaderScreen() {
     return rows;
   }, [chapter]);
 
-  const tokens = useMemo(
-    () => tokensFromChapter(chapter, book?.manifest.language),
-    [chapter, book?.manifest.language],
-  );
+  const tokens = useMemo(() => {
+    const lang = book?.manifest.language;
+    if (mode === 'rsvp' && rsvpSettings?.audioSync && syncAvailable) {
+      return alignmentTokensFromChapter(chapter, lang);
+    }
+    return tokensFromChapter(chapter, lang);
+  }, [chapter, book?.manifest.language, mode, rsvpSettings?.audioSync, syncAvailable]);
 
   const onRsvpProgress = useCallback(
     (wordIndex: number) => {
@@ -241,8 +286,11 @@ export default function ReaderScreen() {
       if (now - lastRsvpSaveRef.current < 2000) return;
       lastRsvpSaveRef.current = now;
       saveRsvpPosition(bookId, { chapterIdx, wordIndex });
+      if (mode === 'rsvp' && rsvpSettings?.audioSync && syncAvailable) {
+        savePosition(bookId, { chapterIdx, currentTime: player.currentTime });
+      }
     },
-    [bookId, chapterIdx],
+    [bookId, chapterIdx, mode, rsvpSettings?.audioSync, syncAvailable, player],
   );
 
   const onRsvpSettingsChange = useCallback((next: RsvpSettings) => {
@@ -258,6 +306,39 @@ export default function ReaderScreen() {
       if (bookId) saveRsvpPosition(bookId, { chapterIdx: next, wordIndex: 0 });
     }
   }, [book, chapterIdx, openChapterRsvp, bookId]);
+
+  // RSVP + audio sync: advance chapter when audio ends
+  useEffect(() => {
+    if (mode !== 'rsvp' || !rsvpSettings?.audioSync || !syncAvailable) {
+      if (mode === 'rsvp') wasPlayingRef.current = playing;
+      return;
+    }
+    const finished = wasPlayingRef.current && !playing && duration > 0 && t >= duration - 0.3;
+    wasPlayingRef.current = playing;
+    if (finished) onRsvpChapterComplete();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, t, duration, mode, rsvpSettings?.audioSync, syncAvailable, onRsvpChapterComplete]);
+
+  const toggleRsvpAudioSync = useCallback(async () => {
+    if (!rsvpSettings) return;
+    const currentlyOn = rsvpSettings.audioSync && syncAvailable;
+    if (currentlyOn) {
+      const updated = { ...rsvpSettings, audioSync: false };
+      setRsvpSettings(updated);
+      saveRsvpSettings(updated);
+      try { player.pause(); } catch {}
+      return;
+    }
+    const ok = await openChapterRsvp(chapterIdx, rsvpWordIndex, true);
+    const updated = { ...rsvpSettings, audioSync: ok };
+    setRsvpSettings(updated);
+    saveRsvpSettings(updated);
+  }, [rsvpSettings, syncAvailable, openChapterRsvp, chapterIdx, rsvpWordIndex, player]);
+
+  const rsvpPlayPause = useCallback(() => {
+    if (playing) player.pause();
+    else player.play();
+  }, [playing, player]);
 
   const switchMode = async (next: ReaderMode) => {
     if (next === mode) return;
@@ -428,6 +509,16 @@ export default function ReaderScreen() {
             initialIndex={rsvpWordIndex}
             fontSize={fontSize}
             chapterKey={`${bookId}:${chapterIdx}`}
+            audioSync={{
+              available: true,
+              active: !!rsvpSettings.audioSync && syncAvailable,
+              externalIndex: syncIndex,
+              playing,
+              speedLabel: `${SPEEDS[speedIdx]}×`,
+              onToggle: () => { void toggleRsvpAudioSync(); },
+              onPlayPause: rsvpPlayPause,
+              onCycleSpeed: cycleSpeed,
+            }}
           />
         )
       ) : (

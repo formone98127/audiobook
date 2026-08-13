@@ -18,6 +18,8 @@ export type RsvpSettings = {
   pushMode: boolean;
   startWpm: number;
   targetWpm: number;
+  /** RSVP flash follows audio word timings when available. */
+  audioSync: boolean;
 };
 
 export type SavedRsvpPosition = { chapterIdx: number; wordIndex: number };
@@ -30,6 +32,7 @@ export const DEFAULT_RSVP_SETTINGS: RsvpSettings = {
   pushMode: false,
   startWpm: 300,
   targetWpm: 500,
+  audioSync: true,
 };
 
 export async function savePosition(bookId: string, pos: SavedPosition): Promise<void> {
@@ -88,6 +91,7 @@ export async function loadRsvpSettings(): Promise<RsvpSettings> {
       pushMode: !!parsed.pushMode,
       startWpm: clampWpm(parsed.startWpm ?? DEFAULT_RSVP_SETTINGS.startWpm),
       targetWpm: clampWpm(parsed.targetWpm ?? DEFAULT_RSVP_SETTINGS.targetWpm),
+      audioSync: parsed.audioSync !== false,
     };
   } catch {
     return { ...DEFAULT_RSVP_SETTINGS };

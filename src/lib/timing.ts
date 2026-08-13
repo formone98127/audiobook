@@ -58,4 +58,48 @@ export class TimingIndex {
   wordStart(sentenceIndex: number, wordIndex: number): number | null {
     return this.wordsBySentence.get(sentenceIndex)?.[wordIndex]?.start ?? null;
   }
+
+  sentenceWordCount(si: number): number {
+    const arr = this.wordsBySentence.get(si);
+    if (!arr) return 0;
+    let n = 0;
+    for (let i = 0; i < arr.length; i++) if (arr[i]) n++;
+    return n;
+  }
+
+  get totalWords(): number {
+    let n = 0;
+    for (let si = 0; si < this.sentenceCount; si++) n += this.sentenceWordCount(si);
+    return n;
+  }
+
+  /** Global word index (sentence-major) for time t. */
+  flatWordAt(t: number): number {
+    const si = this.sentenceAt(t);
+    if (si < 0) return 0;
+    let base = 0;
+    for (let i = 0; i < si; i++) base += this.sentenceWordCount(i);
+    const wi = this.wordAt(si, t);
+    return base + Math.max(0, wi);
+  }
+
+  /** Start time of the flat-th timed word, or null. */
+  timeAtFlatWord(flat: number): number | null {
+    let remaining = Math.max(0, Math.floor(flat));
+    for (let si = 0; si < this.sentenceCount; si++) {
+      const arr = this.wordsBySentence.get(si);
+      const count = this.sentenceWordCount(si);
+      if (remaining < count && arr) {
+        let seen = 0;
+        for (let wi = 0; wi < arr.length; wi++) {
+          if (!arr[wi]) continue;
+          if (seen === remaining) return arr[wi].start;
+          seen++;
+        }
+        return this.sentenceStartOf(si);
+      }
+      remaining -= count;
+    }
+    return null;
+  }
 }
