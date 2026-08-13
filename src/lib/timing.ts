@@ -73,13 +73,15 @@ export class TimingIndex {
     return n;
   }
 
-  /** Global word index (sentence-major) for time t. */
-  flatWordAt(t: number): number {
-    const si = this.sentenceAt(t);
+  /** Global word index (sentence-major) for time t.
+   *  Uses a small lead so on-screen word doesn't lag behind speech. */
+  flatWordAt(t: number, leadSec = 0.18): number {
+    const tt = t + leadSec;
+    const si = this.sentenceAt(tt);
     if (si < 0) return 0;
     let base = 0;
     for (let i = 0; i < si; i++) base += this.sentenceWordCount(i);
-    const wi = this.wordAt(si, t);
+    const wi = this.wordAt(si, tt);
     return base + Math.max(0, wi);
   }
 

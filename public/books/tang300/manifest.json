@@ -17,7 +17,7 @@
       },
       "timings": {
         "url": "timings/ch000.json",
-        "bytes": 548
+        "bytes": 550
       }
     },
     {
@@ -30,7 +30,7 @@
       },
       "timings": {
         "url": "timings/ch001.json",
-        "bytes": 548
+        "bytes": 550
       }
     },
     {
@@ -43,7 +43,7 @@
       },
       "timings": {
         "url": "timings/ch002.json",
-        "bytes": 548
+        "bytes": 543
       }
     },
     {
@@ -56,7 +56,7 @@
       },
       "timings": {
         "url": "timings/ch003.json",
-        "bytes": 724
+        "bytes": 720
       }
     }
   ]
