@@ -203,7 +203,6 @@ async def process_book(book_id: str, voice: str, cjk: bool) -> None:
 
 async def main() -> None:
     await process_book("alice", "en-US-JennyNeural", cjk=False)
-    await process_book("tang300", "zh-CN-XiaoxiaoNeural", cjk=True)
     print("done")
 
 

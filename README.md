@@ -6,9 +6,11 @@ Expo app with **RSVP speed reading** (ReadCoach-style) and **Audio** mode. Karao
 
 After the first successful deploy: **https://formone98127.github.io/audiobook/**
 
-Static demo books ship under `public/books/` (Alice + 唐詩選) **with TTS audio + word timings**, so RSVP **Audio Sync** works on Pages. Regenerate with:
+Static demo books ship under `public/books/` (**Alice**, chapters I–VI) **with TTS audio + word timings**, so RSVP **Audio Sync** works on Pages. Rebuild text / audio with:
 
 ```bash
+# requires Gutenberg 11-0.txt in %TEMP%\alice.txt
+python scripts/build-alice-demo.py
 python scripts/generate-demo-audio.py
 ```
 

@@ -66,13 +66,6 @@ const WEB_DEMO_CATEGORIES: Category[] = [
       { id: 'alice', title: "Alice's Adventures in Wonderland", author: 'Lewis Carroll' },
     ],
   },
-  {
-    id: 'poetry',
-    label: '詩詞練習',
-    books: [
-      { id: 'tang300', title: '唐詩三百首（選）', author: '蘅塘退士' },
-    ],
-  },
 ];
 
 function webBooksBase(): string {
