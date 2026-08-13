@@ -1,0 +1,36 @@
+{
+  "id": "tang300",
+  "title": "唐詩三百首（選）",
+  "language": "zh",
+  "text": { "url": "text.json", "bytes": 0 },
+  "chapters": [
+    {
+      "index": 0,
+      "title": "靜夜思 · 李白",
+      "duration": 0,
+      "audio": { "url": "audio/ch000.mp3", "bytes": 0 },
+      "timings": { "url": "timings/ch000.json", "bytes": 0 }
+    },
+    {
+      "index": 1,
+      "title": "春曉 · 孟浩然",
+      "duration": 0,
+      "audio": { "url": "audio/ch001.mp3", "bytes": 0 },
+      "timings": { "url": "timings/ch001.json", "bytes": 0 }
+    },
+    {
+      "index": 2,
+      "title": "登鸛雀樓 · 王之渙",
+      "duration": 0,
+      "audio": { "url": "audio/ch002.mp3", "bytes": 0 },
+      "timings": { "url": "timings/ch002.json", "bytes": 0 }
+    },
+    {
+      "index": 3,
+      "title": "黃鶴樓送孟浩然之廣陵 · 李白",
+      "duration": 0,
+      "audio": { "url": "audio/ch003.mp3", "bytes": 0 },
+      "timings": { "url": "timings/ch003.json", "bytes": 0 }
+    }
+  ]
+}

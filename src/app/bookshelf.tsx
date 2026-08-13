@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { loadBook } from '../lib/api';
-import { BOOKS, manifestUrlFor } from '../lib/config';
+import { CATEGORIES, manifestUrlFor } from '../lib/config';
 import type { Manifest } from '../lib/types';
 
 function fmtTime(sec: number): string {
@@ -48,17 +48,24 @@ export default function Bookshelf() {
           <Text style={styles.settingsIcon}>⚙</Text>
         </Pressable>
       </View>
-      <View style={styles.grid}>
-        {BOOKS.map((b) => (
-          <Pressable key={b.id} style={styles.card} onPress={() => tapBook(b.id)}>
-            <View style={styles.cover}>
-              <Text style={styles.coverText}>{b.title[0]}</Text>
+      <ScrollView>
+        {CATEGORIES.map((cat) => (
+          <View key={cat.id} style={styles.categorySection}>
+            <Text style={styles.categoryLabel}>{cat.label}</Text>
+            <View style={styles.grid}>
+              {cat.books.map((b) => (
+                <Pressable key={b.id} style={styles.card} onPress={() => tapBook(b.id)}>
+                  <View style={styles.cover}>
+                    <Text style={styles.coverText}>{b.title[0]}</Text>
+                  </View>
+                  <Text style={styles.title} numberOfLines={2}>{b.title}</Text>
+                  <Text style={styles.author}>{b.author}</Text>
+                </Pressable>
+              ))}
             </View>
-            <Text style={styles.title} numberOfLines={2}>{b.title}</Text>
-            <Text style={styles.author}>{b.author}</Text>
-          </Pressable>
+          </View>
         ))}
-      </View>
+      </ScrollView>
 
       <Modal visible={selectedBook !== null} transparent animationType="slide" onRequestClose={() => setSelectedBook(null)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setSelectedBook(null)}>
@@ -89,16 +96,18 @@ export default function Bookshelf() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0B0F14', padding: 24 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   heading: { color: '#F5C518', fontSize: 32, fontWeight: '700' },
   settingsBtn: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#1A2230', alignItems: 'center', justifyContent: 'center' },
   settingsIcon: { color: '#E8E6DF', fontSize: 24 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 24 },
-  card: { width: 200, gap: 10 },
-  cover: { width: 200, height: 280, borderRadius: 14, backgroundColor: '#1A3A5C', alignItems: 'center', justifyContent: 'center' },
-  coverText: { color: '#F5C518', fontSize: 88, fontWeight: '700', fontFamily: 'serif' },
-  title: { color: '#E8E6DF', fontSize: 18, fontWeight: '600' },
-  author: { color: '#7D8590', fontSize: 15 },
+  categorySection: { marginBottom: 28 },
+  categoryLabel: { color: '#7D8590', fontSize: 18, fontWeight: '600', marginBottom: 16, paddingHorizontal: 4 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },
+  card: { width: 160, gap: 8 },
+  cover: { width: 160, height: 220, borderRadius: 12, backgroundColor: '#1A3A5C', alignItems: 'center', justifyContent: 'center' },
+  coverText: { color: '#F5C518', fontSize: 64, fontWeight: '700', fontFamily: 'serif' },
+  title: { color: '#E8E6DF', fontSize: 15, fontWeight: '600' },
+  author: { color: '#7D8590', fontSize: 13 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalCard: { backgroundColor: '#131A24', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, maxHeight: '70%' },
   modalTitle: { color: '#E8E6DF', fontSize: 20, fontWeight: '700', marginBottom: 12 },
