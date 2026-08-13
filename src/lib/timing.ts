@@ -75,7 +75,7 @@ export class TimingIndex {
 
   /** Global word index (sentence-major) for time t.
    *  Lead keeps on-screen word from lagging behind speech. */
-  flatWordAt(t: number, leadSec = 0.55): number {
+  flatWordAt(t: number, leadSec = 0.22): number {
     const tt = t + leadSec;
     const si = this.sentenceAt(tt);
     if (si < 0) return 0;
