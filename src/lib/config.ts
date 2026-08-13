@@ -78,7 +78,12 @@ const WEB_DEMO_CATEGORIES: Category[] = [
 function webBooksBase(): string {
   const base = (Constants.expoConfig?.experiments as { baseUrl?: string } | undefined)?.baseUrl ?? '';
   const trimmed = base.replace(/\/$/, '');
-  return `${trimmed}/books`;
+  const path = `${trimmed}/books` || '/books';
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}${normalized}`;
+  }
+  return normalized;
 }
 
 const envServer = process.env.EXPO_PUBLIC_SERVER?.replace(/\/$/, '');

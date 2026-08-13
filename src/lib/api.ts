@@ -1,14 +1,28 @@
+import { Platform } from 'react-native';
+
 import type { BookText, Manifest, TimingsJson } from './types';
 
 export function resolveUrl(manifestUrl: string, rel: string): string {
   return manifestUrl.slice(0, manifestUrl.lastIndexOf('/') + 1) + rel;
 }
 
+/** expo-audio on web needs absolute http(s) URLs. */
+export function toAbsoluteUrl(url: string): string {
+  if (Platform.OS !== 'web') return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  if (typeof window === 'undefined') return url;
+  try {
+    return new URL(url, window.location.href).href;
+  } catch {
+    return url;
+  }
+}
+
 async function fetchJson<T>(url: string, timeoutMs = 12000): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: ctrl.signal });
+    const res = await fetch(toAbsoluteUrl(url), { signal: ctrl.signal });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
     return (await res.json()) as T;
   } catch (e: any) {
@@ -36,5 +50,5 @@ export function loadTimings(manifestUrl: string, chapterIndex: number, manifest:
 export function audioUrlFor(manifestUrl: string, chapterIndex: number, manifest: Manifest): string {
   const ch = manifest.chapters.find((c) => c.index === chapterIndex);
   if (!ch) throw new Error(`chapter ${chapterIndex} not in manifest`);
-  return resolveUrl(manifestUrl, ch.audio.url);
+  return toAbsoluteUrl(resolveUrl(manifestUrl, ch.audio.url));
 }

@@ -46,7 +46,7 @@ export function RsvpView({
   chapterKey,
   audioSync,
 }: Props) {
-  const syncing = !!(audioSync?.active && audioSync.available);
+  const syncing = !!audioSync?.active;
   const [index, setIndex] = useState(() => clampIndex(initialIndex, tokens.length));
   const [playing, setPlaying] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -250,7 +250,7 @@ export function RsvpView({
         </Text>
         <Text style={styles.hint}>
           {isPlaying ? 'Tap to pause' : 'Tap to play'}
-          {syncing ? ' · + audio' : ''}
+          {syncing ? ' · audio on' : ' · text only (no audio loaded)'}
         </Text>
       </Pressable>
 
