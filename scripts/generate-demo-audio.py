@@ -102,8 +102,8 @@ def build_timings_from_bounds(
         for wi, tok in enumerate(words_of(sent, cjk)):
             expected.append((si, wi, tok))
 
-    # Scale + small negative lead so on-screen word meets the ear (text was lagging).
-    LEAD = 0.12
+    # Keep boundary times faithful; client TimingIndex applies display lead.
+    LEAD = 0.0
     scaled = [
         {
             "start": max(0.0, float(b["start"]) * time_scale - LEAD),

@@ -72,7 +72,7 @@ export default function ReaderScreen() {
   const [syncAvailable, setSyncAvailable] = useState(false);
   const [syncIndex, setSyncIndex] = useState(0);
 
-  const player = useAudioPlayer(null, { updateInterval: 250 });
+  const player = useAudioPlayer(null, { updateInterval: 50 });
 
   useEffect(() => () => { try { player.pause(); } catch {} }, [player]);
 
@@ -88,7 +88,7 @@ export default function ReaderScreen() {
   useEffect(() => {
     const needTick = mode === 'audio' || (mode === 'rsvp' && syncAvailable);
     if (!needTick) return;
-    const id = setInterval(() => setTick((v) => v + 1), 100);
+    const id = setInterval(() => setTick((v) => v + 1), 50);
     return () => clearInterval(id);
   }, [mode, syncAvailable]);
 
