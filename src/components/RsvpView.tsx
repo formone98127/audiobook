@@ -10,6 +10,7 @@ import {
   type ChunkSize,
 } from '@/lib/rsvp';
 import type { RsvpSettings } from '@/lib/storage';
+import { clampLead, fmtLead } from '@/lib/storage';
 import { useTheme } from '@/lib/theme';
 
 export type RsvpAudioSync = {
@@ -18,12 +19,10 @@ export type RsvpAudioSync = {
   externalIndex: number;
   playing: boolean;
   speedLabel: string;
-  nudgeSec?: number;
   onToggle: () => void;
   onPlayPause: () => void;
   onCycleSpeed: () => void;
   onStep?: (deltaChunks: number) => void;
-  onNudge?: (deltaSec: number) => void;
 };
 
 type Props = {
@@ -218,9 +217,9 @@ export function RsvpView({
     wakeFocus();
   };
 
-  const nudge = (delta: number) => {
+  const bumpLead = (delta: number) => {
+    patch({ syncLeadSec: clampLead((settings.syncLeadSec ?? 0.2) + delta) });
     wakeFocus();
-    audioSync?.onNudge?.(delta);
   };
 
   const togglePlay = () => {
@@ -301,11 +300,11 @@ export function RsvpView({
                 <Text style={styles.speedVal}>{audioSync?.speedLabel ?? '1×'}</Text>
               </Pressable>
               <View style={styles.leadRow}>
-                <Pressable style={styles.leadBtn} onPress={() => nudge(-0.1)}>
+                <Pressable style={styles.leadBtn} onPress={() => bumpLead(-0.1)}>
                   <Text style={styles.leadBtnText}>−0.1s</Text>
                 </Pressable>
-                <Text style={styles.leadVal}>{fmtNudge(audioSync?.nudgeSec ?? 0)}</Text>
-                <Pressable style={styles.leadBtn} onPress={() => nudge(0.1)}>
+                <Text style={styles.leadVal}>{fmtLead(settings.syncLeadSec)}</Text>
+                <Pressable style={styles.leadBtn} onPress={() => bumpLead(0.1)}>
                   <Text style={styles.leadBtnText}>+0.1s</Text>
                 </Pressable>
               </View>
@@ -330,7 +329,7 @@ export function RsvpView({
         </View>
 
         <Text style={styles.hint}>
-          {syncing ? 'tap · ‹ › · audio · ±0.1s' : 'tap · ‹ › · speed · 1 2 3 chunk'}
+          {syncing ? 'tap · ‹ › · text ±0.1s' : 'tap · ‹ › · speed · 1 2 3 chunk'}
         </Text>
       </View>
     </View>
@@ -423,13 +422,6 @@ function remainingLabel(chunkCount: number, chunkIdx: number, wpm: number, chunk
 function clampIndex(i: number, len: number): number {
   if (len <= 0) return 0;
   return Math.max(0, Math.min(Math.floor(i), len - 1));
-}
-
-function fmtNudge(sec: number): string {
-  const n = Math.round(sec * 10) / 10;
-  if (n === 0) return '0.0s';
-  if (n > 0) return `+${n.toFixed(1)}s faster`;
-  return `${n.toFixed(1)}s delayed`;
 }
 
 function makeStyles(c: Palette) {
@@ -547,7 +539,7 @@ function makeStyles(c: Palette) {
       fontSize: 11,
       letterSpacing: 0.6,
       color: c.fg,
-      minWidth: 88,
+      minWidth: 110,
       textAlign: 'center',
     },
     chunk: { flexDirection: 'row', gap: 4 },

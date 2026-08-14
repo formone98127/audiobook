@@ -76,7 +76,6 @@ export default function ReaderScreen() {
   const [syncAvailable, setSyncAvailable] = useState(false);
   const [syncIndex, setSyncIndex] = useState(0);
   const syncIndexRef = useRef(0);
-  const [nudgeSec, setNudgeSec] = useState(0);
 
   const player = useAudioPlayer(null, { updateInterval: 25 });
 
@@ -103,8 +102,6 @@ export default function ReaderScreen() {
   const restoredRef = useRef(false);
   const lastSaveRef = useRef(0);
   const lastRsvpSaveRef = useRef(0);
-  const pinIndexRef = useRef<number | null>(null);
-  const pinUntilRef = useRef(0);
 
   useEffect(() => {
     if (mode !== 'rsvp' || loadingChapter) setChromeFocus(false);
@@ -136,7 +133,6 @@ export default function ReaderScreen() {
         setRsvpWordIndex(wordIndex);
         setSyncIndex(wordIndex);
         syncIndexRef.current = wordIndex;
-        setNudgeSec(0);
         // Always try to attach audio+timings for RSVP (Pages demo + LAN).
         try {
           const tj = await loadTimings(manifestUrl, i, book.manifest);
@@ -254,21 +250,12 @@ export default function ReaderScreen() {
   // Drive RSVP flash from audio word timings whenever media is loaded
   useEffect(() => {
     if (mode !== 'rsvp' || !timings || !syncAvailable) return;
-    if (Date.now() < pinUntilRef.current && pinIndexRef.current != null) {
-      const pinned = pinIndexRef.current;
-      syncIndexRef.current = pinned;
-      setSyncIndex(pinned);
-      setRsvpWordIndex(pinned);
-      return;
-    }
-    const flat = timings.flatWordAt(t);
+    const lead = rsvpSettings?.syncLeadSec ?? 0.2;
+    const flat = timings.flatWordAt(t, lead);
     syncIndexRef.current = flat;
     setSyncIndex(flat);
     setRsvpWordIndex(flat);
-    syncIndexRef.current = flat;
-    setSyncIndex(flat);
-    setRsvpWordIndex(flat);
-  }, [t, mode, timings, syncAvailable, playing]);
+  }, [t, mode, timings, syncAvailable, playing, rsvpSettings?.syncLeadSec]);
 
   useEffect(() => {
     if (mode !== 'audio') return;
@@ -378,7 +365,6 @@ export default function ReaderScreen() {
     syncIndexRef.current = next;
     setSyncIndex(next);
     setRsvpWordIndex(next);
-    setNudgeSec(0);
     const seek = timings.timeAtFlatWord(next);
     if (seek != null) player.seekTo(seek);
   }, [timings, rsvpSettings?.chunkSize, syncIndex, player]);
@@ -412,13 +398,6 @@ export default function ReaderScreen() {
 
   const seekBy = (delta: number) => {
     void player.seekTo(Math.max(0, Math.min(player.currentTime + delta, player.duration || 0)));
-  };
-
-  const nudgeAudio = (delta: number) => {
-    pinIndexRef.current = syncIndexRef.current;
-    pinUntilRef.current = Date.now() + 500;
-    setNudgeSec((n) => Math.round((n + delta) * 10) / 10);
-    seekBy(delta);
   };
 
   const cycleSpeed = () => {
@@ -532,12 +511,10 @@ export default function ReaderScreen() {
               externalIndex: syncIndex,
               playing,
               speedLabel: `${SPEEDS[speedIdx]}×`,
-              nudgeSec,
               onToggle: () => { void toggleRsvpAudioSync(); },
               onPlayPause: rsvpPlayPause,
               onCycleSpeed: cycleSpeed,
               onStep: rsvpStep,
-              onNudge: nudgeAudio,
             }}
           />
         )

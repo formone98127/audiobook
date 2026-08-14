@@ -20,6 +20,8 @@ export type RsvpSettings = {
   targetWpm: number;
   /** RSVP flash follows audio word timings when available. */
   audioSync: boolean;
+  /** Seconds the RSVP flash leads audio. Positive = text ahead. */
+  syncLeadSec: number;
 };
 
 export type SavedRsvpPosition = { chapterIdx: number; wordIndex: number };
@@ -33,6 +35,7 @@ export const DEFAULT_RSVP_SETTINGS: RsvpSettings = {
   startWpm: 300,
   targetWpm: 500,
   audioSync: true,
+  syncLeadSec: 0.2,
 };
 
 export async function savePosition(bookId: string, pos: SavedPosition): Promise<void> {
@@ -92,6 +95,7 @@ export async function loadRsvpSettings(): Promise<RsvpSettings> {
       startWpm: clampWpm(parsed.startWpm ?? DEFAULT_RSVP_SETTINGS.startWpm),
       targetWpm: clampWpm(parsed.targetWpm ?? DEFAULT_RSVP_SETTINGS.targetWpm),
       audioSync: parsed.audioSync !== false,
+      syncLeadSec: clampLead(parsed.syncLeadSec ?? DEFAULT_RSVP_SETTINGS.syncLeadSec),
     };
   } catch {
     return { ...DEFAULT_RSVP_SETTINGS };
@@ -101,6 +105,18 @@ export async function loadRsvpSettings(): Promise<RsvpSettings> {
 function clampWpm(n: number): number {
   if (!Number.isFinite(n)) return DEFAULT_RSVP_SETTINGS.wpm;
   return Math.max(100, Math.min(1000, Math.round(n)));
+}
+
+export function clampLead(n: number): number {
+  if (!Number.isFinite(n)) return DEFAULT_RSVP_SETTINGS.syncLeadSec;
+  return Math.max(-2, Math.min(2, Math.round(n * 10) / 10));
+}
+
+export function fmtLead(sec: number | undefined): string {
+  const n = clampLead(sec ?? 0);
+  if (n === 0) return '0.0s';
+  if (n > 0) return `+${n.toFixed(1)}s faster`;
+  return `${n.toFixed(1)}s delayed`;
 }
 
 export async function saveRsvpPosition(bookId: string, pos: SavedRsvpPosition): Promise<void> {

@@ -12,6 +12,8 @@ import {
   loadRsvpSettings,
   saveFontSize,
   saveRsvpSettings,
+  clampLead,
+  fmtLead,
   type RsvpSettings,
 } from '@/lib/storage';
 import { useTheme } from '@/lib/theme';
@@ -84,6 +86,23 @@ export default function Settings() {
             </Text>
           </Pressable>
           <Text style={[styles.label, { color: colors.muted }]}>When on, RSVP follows narration word timings.</Text>
+
+          <Text style={[styles.label, { color: colors.muted }]}>Text vs audio (+ faster / − delayed)</Text>
+          <View style={styles.row}>
+            <Pressable
+              style={[styles.btn, { borderColor: colors.border }]}
+              onPress={() => patchRsvp({ syncLeadSec: clampLead((rsvp.syncLeadSec ?? 0.2) - 0.1) })}
+            >
+              <Text style={[styles.btnText, { color: colors.fg }]}>−0.1s</Text>
+            </Pressable>
+            <Text style={[styles.valueText, { color: colors.fg }]}>{fmtLead(rsvp.syncLeadSec)}</Text>
+            <Pressable
+              style={[styles.btn, { borderColor: colors.border }]}
+              onPress={() => patchRsvp({ syncLeadSec: clampLead((rsvp.syncLeadSec ?? 0.2) + 0.1) })}
+            >
+              <Text style={[styles.btnText, { color: colors.fg }]}>+0.1s</Text>
+            </Pressable>
+          </View>
 
           <View style={styles.row}>
             <Pressable style={[styles.btn, { borderColor: colors.border }]} onPress={() => bumpWpm('wpm', -WPM_STEP)}>
@@ -175,6 +194,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   btn: { borderWidth: 1, borderRadius: 4, paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center', backgroundColor: 'transparent' },
   btnText: { fontSize: 15 },
-  valueText: { fontFamily: Fonts.mono, fontSize: 14, letterSpacing: 0.6, minWidth: 72, textAlign: 'center' },
+  valueText: { fontFamily: Fonts.mono, fontSize: 14, letterSpacing: 0.6, minWidth: 110, textAlign: 'center' },
   preview: { fontFamily: Fonts.display, lineHeight: 32 },
 });

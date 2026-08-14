@@ -107,7 +107,7 @@ export class TimingIndex {
    * Flat word index for time t (sentence-major order).
    * Positive lead pulls the flash ahead of audio (compensates poll/render lag).
    */
-  flatWordAt(t: number, leadSec = 0.22): number {
+  flatWordAt(t: number, leadSec = 0): number {
     const tt = Math.max(0, t + leadSec);
     const starts = this.flatStarts;
     if (starts.length === 0) return 0;
