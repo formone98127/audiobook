@@ -102,6 +102,8 @@ export default function ReaderScreen() {
   const restoredRef = useRef(false);
   const lastSaveRef = useRef(0);
   const lastRsvpSaveRef = useRef(0);
+  const pinIndexRef = useRef<number | null>(null);
+  const pinUntilRef = useRef(0);
 
   useEffect(() => {
     if (mode !== 'rsvp' || loadingChapter) setChromeFocus(false);
@@ -250,7 +252,17 @@ export default function ReaderScreen() {
   // Drive RSVP flash from audio word timings whenever media is loaded
   useEffect(() => {
     if (mode !== 'rsvp' || !timings || !syncAvailable) return;
+    if (Date.now() < pinUntilRef.current && pinIndexRef.current != null) {
+      const pinned = pinIndexRef.current;
+      syncIndexRef.current = pinned;
+      setSyncIndex(pinned);
+      setRsvpWordIndex(pinned);
+      return;
+    }
     const flat = timings.flatWordAt(t);
+    syncIndexRef.current = flat;
+    setSyncIndex(flat);
+    setRsvpWordIndex(flat);
     syncIndexRef.current = flat;
     setSyncIndex(flat);
     setRsvpWordIndex(flat);
@@ -399,6 +411,12 @@ export default function ReaderScreen() {
     void player.seekTo(Math.max(0, Math.min(player.currentTime + delta, player.duration || 0)));
   };
 
+  const nudgeAudio = (delta: number) => {
+    pinIndexRef.current = syncIndexRef.current;
+    pinUntilRef.current = Date.now() + 500;
+    seekBy(delta);
+  };
+
   const cycleSpeed = () => {
     const next = (speedIdx + 1) % SPEEDS.length;
     setSpeedIdx(next);
@@ -514,6 +532,7 @@ export default function ReaderScreen() {
               onPlayPause: rsvpPlayPause,
               onCycleSpeed: cycleSpeed,
               onStep: rsvpStep,
+              onNudge: nudgeAudio,
             }}
           />
         )

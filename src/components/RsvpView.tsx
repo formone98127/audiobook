@@ -21,6 +21,7 @@ export type RsvpAudioSync = {
   onPlayPause: () => void;
   onCycleSpeed: () => void;
   onStep?: (deltaChunks: number) => void;
+  onNudge?: (deltaSec: number) => void;
 };
 
 type Props = {
@@ -214,6 +215,11 @@ export function RsvpView({
     wakeFocus();
   };
 
+  const nudge = (delta: number) => {
+    wakeFocus();
+    audioSync?.onNudge?.(delta);
+  };
+
   const togglePlay = () => {
     wakeFocus();
     if (syncing && audioSync) {
@@ -280,10 +286,20 @@ export function RsvpView({
           </View>
 
           {syncing ? (
-            <Pressable style={styles.speedChip} onPress={audioSync?.onCycleSpeed}>
-              <Text style={styles.speedLabel}>Audio</Text>
-              <Text style={styles.speedVal}>{audioSync?.speedLabel ?? '1×'}</Text>
-            </Pressable>
+            <View style={styles.syncExtras}>
+              <Pressable style={styles.speedChip} onPress={audioSync?.onCycleSpeed}>
+                <Text style={styles.speedLabel}>Audio</Text>
+                <Text style={styles.speedVal}>{audioSync?.speedLabel ?? '1×'}</Text>
+              </Pressable>
+              <View style={styles.leadRow}>
+                <Pressable style={styles.leadBtn} onPress={() => nudge(-0.1)}>
+                  <Text style={styles.leadBtnText}>−0.1s</Text>
+                </Pressable>
+                <Pressable style={styles.leadBtn} onPress={() => nudge(0.1)}>
+                  <Text style={styles.leadBtnText}>+0.1s</Text>
+                </Pressable>
+              </View>
+            </View>
           ) : (
             <WpmSlider wpm={settings.wpm} onChange={setWpm} colors={colors} />
           )}
@@ -304,7 +320,7 @@ export function RsvpView({
         </View>
 
         <Text style={styles.hint}>
-          {syncing ? 'tap · ‹ › · audio sync' : 'tap · ‹ › · speed · 1 2 3 chunk'}
+          {syncing ? 'tap · ‹ › · audio · ±0.1s' : 'tap · ‹ › · speed · 1 2 3 chunk'}
         </Text>
       </View>
     </View>
@@ -515,7 +531,7 @@ function makeStyles(c: Palette) {
     playBtn: { width: 56, height: 56, minWidth: 56, minHeight: 56, borderColor: c.fg },
     iconGlyph: { color: c.fg, fontSize: 22, lineHeight: 24 },
     playGlyph: { color: c.fg, fontSize: 16 },
-    speedChip: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 120 },
+    speedChip: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     speedLabel: {
       fontFamily: Fonts.mono,
       fontSize: 11,
@@ -526,6 +542,24 @@ function makeStyles(c: Palette) {
     speedVal: {
       fontFamily: Fonts.mono,
       fontSize: 13,
+      letterSpacing: 0.6,
+      color: c.fg,
+    },
+    syncExtras: { flexDirection: 'row', alignItems: 'center', gap: 16, flexWrap: 'wrap' },
+    leadRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    leadBtn: {
+      minWidth: 52,
+      minHeight: 36,
+      paddingHorizontal: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 4,
+    },
+    leadBtnText: {
+      fontFamily: Fonts.mono,
+      fontSize: 11,
       letterSpacing: 0.6,
       color: c.fg,
     },
