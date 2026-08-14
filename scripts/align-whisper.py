@@ -1,8 +1,15 @@
-"""Re-align Alice timings with Whisper word timestamps on the final MP3s."""
+"""Align Alice timings to the final MP3s via Whisper word clocks.
+
+Do not greedy-match Whisper's text to the book. Token mismatches accumulate
+and by mid-chapter the RSVP stream is minutes off. Stretch Whisper's word
+start/end times onto the expected token count so first/last stay pinned
+to the audio and nothing can walk away.
+"""
 from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 from faster_whisper import WhisperModel
@@ -29,19 +36,24 @@ def words_of(sentence: str, cjk: bool) -> list[str]:
     return [w for w in sentence.split() if w and not PUNCT_ONLY.match(w)]
 
 
-def norm(tok: str) -> str:
-    t = tok.strip().lower()
-    t = re.sub(r"^[^a-z0-9]+|[^a-z0-9]+$", "", t)
-    t = t.replace("’", "'")
-    return t
+def duration_sec(path: Path) -> float:
+    out = subprocess.check_output(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ],
+        text=True,
+    ).strip()
+    return float(out)
 
 
-def align_chapter(
-    model: WhisperModel,
-    audio_path: Path,
-    expected: list[str],
-) -> list[dict[str, float]]:
-    """Whisper word stamps, mapped onto expected tokens (1:1 by order)."""
+def whisper_words(model: WhisperModel, audio_path: Path) -> list[dict[str, float]]:
     segments, _info = model.transcribe(
         str(audio_path),
         word_timestamps=True,
@@ -50,32 +62,50 @@ def align_chapter(
         vad_filter=False,
         condition_on_previous_text=False,
     )
-    heard: list[dict[str, float | str]] = []
+    heard: list[dict[str, float]] = []
     for seg in segments:
         for w in seg.words or []:
-            heard.append({"text": w.word, "start": float(w.start), "end": float(w.end)})
+            start = float(w.start)
+            end = max(float(w.end), start + 0.04)
+            heard.append({"start": start, "end": end})
+    return heard
 
-    # Greedy monotone match: walk heard words, assign to expected tokens.
+
+def stretch(heard: list[dict[str, float]], n: int, dur: float) -> list[dict[str, float]]:
+    """Map n book tokens onto the heard timeline. Monotone, pinned to [0, dur]."""
+    if n <= 0:
+        return []
+    if not heard:
+        step = dur / max(1, n)
+        return [{"start": i * step, "end": (i + 1) * step} for i in range(n)]
+
+    starts = [h["start"] for h in heard]
+    ends = [h["end"] for h in heard]
+    m = len(starts)
     out: list[dict[str, float]] = []
-    hi = 0
-    for tok in expected:
-        target = norm(tok)
-        best = None
-        # scan forward a small window for a matching heard word
-        for j in range(hi, min(len(heard), hi + 12)):
-            if norm(str(heard[j]["text"])) == target:
-                best = j
-                break
-        if best is None:
-            # no match — take next heard word in order
-            best = min(hi, len(heard) - 1)
-        hi = best + 1
-        w = heard[best]
-        out.append({"start": float(w["start"]), "end": float(w["end"])})
+    for i in range(n):
+        pos = 0.0 if n == 1 else i * (m - 1) / (n - 1)
+        lo = int(pos)
+        hi = min(lo + 1, m - 1)
+        frac = pos - lo
+        start = starts[lo] * (1 - frac) + starts[hi] * frac
+        end = ends[lo] * (1 - frac) + ends[hi] * frac
+        start = max(0.0, min(start, dur))
+        end = max(start + 0.04, min(end, dur + 0.04))
+        out.append({"start": start, "end": end})
+
+    # Enforce monotone after rounding noise
+    for i in range(1, len(out)):
+        if out[i]["start"] < out[i - 1]["start"]:
+            out[i]["start"] = out[i - 1]["start"]
+        if out[i]["end"] < out[i]["start"] + 0.04:
+            out[i]["end"] = out[i]["start"] + 0.04
     return out
 
 
-def build_timings(chapter: dict, spans: list[dict[str, float]], cjk: bool) -> dict:
+def build_timings(
+    chapter: dict, spans: list[dict[str, float]], cjk: bool
+) -> dict:
     sents = sentences_of(chapter)
     expected: list[tuple[int, int, str]] = []
     for si, sent in enumerate(sents):
@@ -84,10 +114,10 @@ def build_timings(chapter: dict, spans: list[dict[str, float]], cjk: bool) -> di
 
     words_json: list[list[float | int]] = []
     for i, (si, wi, _tok) in enumerate(expected):
-        b = spans[i] if i < len(spans) else {"start": 0.0, "end": 0.0}
-        start = float(b["start"])
-        end = max(float(b["end"]), start + 0.04)
-        words_json.append([si, wi, round(start, 3), round(end, 3)])
+        b = spans[i] if i < len(spans) else {"start": 0.0, "end": 0.04}
+        words_json.append(
+            [si, wi, round(float(b["start"]), 3), round(float(b["end"]), 3)]
+        )
 
     sentences_json: list[list[float | int]] = []
     by_sent: dict[int, list[list[float | int]]] = {}
@@ -119,11 +149,14 @@ def main() -> None:
         expected: list[str] = []
         for sent in sentences_of(ch):
             expected.extend(words_of(sent, cjk=False))
-        print(f"[alice] ch{idx} whisper-align {audio_path.name} ({len(expected)} words)…")
-        spans = align_chapter(model, audio_path, expected)
+        dur = duration_sec(audio_path)
+        print(f"[alice] ch{idx} whisper {audio_path.name} ({len(expected)} words, {dur:.1f}s)…")
+        heard = whisper_words(model, audio_path)
+        spans = stretch(heard, len(expected), dur)
         timings = build_timings(ch, spans, cjk=False)
         timing_path.write_text(json.dumps(timings, ensure_ascii=False), encoding="utf-8")
-        print(f"[alice] ch{idx} -> {len(spans)} spans")
+        last = spans[-1]["start"] if spans else 0
+        print(f"[alice] ch{idx} -> heard={len(heard)} tokens={len(expected)} last={last:.1f}s")
 
 
 if __name__ == "__main__":
