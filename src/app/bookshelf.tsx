@@ -2,6 +2,9 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { Fonts } from '@/constants/lumina';
+import { useTheme } from '@/lib/theme';
 import { loadBook } from '../lib/api';
 import { CATEGORIES, manifestUrlFor } from '../lib/config';
 import type { Manifest } from '../lib/types';
@@ -13,6 +16,7 @@ function fmtTime(sec: number): string {
 }
 
 export default function Bookshelf() {
+  const { colors } = useTheme();
   const [selectedBook, setSelectedBook] = useState<string | null>(null);
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [loading, setLoading] = useState(false);
@@ -41,25 +45,27 @@ export default function Bookshelf() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]} edges={['top', 'bottom']}>
       <View style={styles.headerRow}>
-        <Text style={styles.heading}>Bookshelf</Text>
-        <Pressable style={styles.settingsBtn} onPress={() => router.push('/settings')}>
-          <Text style={styles.settingsIcon}>⚙</Text>
+        <Text style={[styles.heading, { color: colors.fg }]}>
+          Lumina <Text style={{ color: colors.accent }}>RSVP</Text>
+        </Text>
+        <Pressable onPress={() => router.push('/settings')} hitSlop={8}>
+          <Text style={[styles.editBtn, { color: colors.muted }]}>Settings</Text>
         </Pressable>
       </View>
       <ScrollView>
         {CATEGORIES.map((cat) => (
           <View key={cat.id} style={styles.categorySection}>
-            <Text style={styles.categoryLabel}>{cat.label}</Text>
+            <Text style={[styles.categoryLabel, { color: colors.muted }]}>{cat.label}</Text>
             <View style={styles.grid}>
               {cat.books.map((b) => (
                 <Pressable key={b.id} style={styles.card} onPress={() => tapBook(b.id)}>
-                  <View style={styles.cover}>
-                    <Text style={styles.coverText}>{b.title[0]}</Text>
+                  <View style={[styles.cover, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[styles.coverText, { color: colors.accent }]}>{b.title[0]}</Text>
                   </View>
-                  <Text style={styles.title} numberOfLines={2}>{b.title}</Text>
-                  <Text style={styles.author}>{b.author}</Text>
+                  <Text style={[styles.title, { color: colors.fg }]} numberOfLines={2}>{b.title}</Text>
+                  <Text style={[styles.author, { color: colors.muted }]}>{b.author}</Text>
                 </Pressable>
               ))}
             </View>
@@ -69,10 +75,10 @@ export default function Bookshelf() {
 
       <Modal visible={selectedBook !== null} transparent animationType="slide" onRequestClose={() => setSelectedBook(null)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setSelectedBook(null)}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{manifest?.title ?? 'Loading...'}</Text>
-            {loading && <ActivityIndicator color="#F5C518" style={{ marginVertical: 20 }} />}
-            {error && <Text style={styles.errorText}>{error}</Text>}
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.fg }]}>{manifest?.title ?? 'Loading...'}</Text>
+            {loading && <ActivityIndicator color={colors.accent} style={{ marginVertical: 20 }} />}
+            {error && <Text style={[styles.errorText, { color: colors.accent }]}>{error}</Text>}
             {manifest && (
               <ScrollView>
                 {manifest.chapters.map((c) => (
@@ -81,8 +87,8 @@ export default function Bookshelf() {
                     style={styles.chapterRow}
                     onPress={() => openChapter(c.index)}
                   >
-                    <Text style={styles.chapterRowText}>{c.title}</Text>
-                    <Text style={styles.dim}>{fmtTime(c.duration)}</Text>
+                    <Text style={[styles.chapterRowText, { color: colors.fg }]}>{c.title}</Text>
+                    <Text style={[styles.dim, { color: colors.muted }]}>{fmtTime(c.duration)}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -95,24 +101,23 @@ export default function Bookshelf() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B0F14', padding: 24 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  heading: { color: '#F5C518', fontSize: 32, fontWeight: '700' },
-  settingsBtn: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#1A2230', alignItems: 'center', justifyContent: 'center' },
-  settingsIcon: { color: '#E8E6DF', fontSize: 24 },
+  container: { flex: 1, paddingHorizontal: 24, paddingTop: 8 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 24 },
+  heading: { fontFamily: Fonts.display, fontSize: 28, letterSpacing: -0.4 },
+  editBtn: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase' },
   categorySection: { marginBottom: 28 },
-  categoryLabel: { color: '#7D8590', fontSize: 18, fontWeight: '600', marginBottom: 16, paddingHorizontal: 4 },
+  categoryLabel: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 16 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },
   card: { width: 160, gap: 8 },
-  cover: { width: 160, height: 220, borderRadius: 12, backgroundColor: '#1A3A5C', alignItems: 'center', justifyContent: 'center' },
-  coverText: { color: '#F5C518', fontSize: 64, fontWeight: '700', fontFamily: 'serif' },
-  title: { color: '#E8E6DF', fontSize: 15, fontWeight: '600' },
-  author: { color: '#7D8590', fontSize: 13 },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalCard: { backgroundColor: '#131A24', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, maxHeight: '70%' },
-  modalTitle: { color: '#E8E6DF', fontSize: 20, fontWeight: '700', marginBottom: 12 },
-  chapterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 12, borderRadius: 8, gap: 12 },
-  chapterRowText: { color: '#E8E6DF', fontSize: 17, flex: 1 },
-  dim: { color: '#7D8590', fontSize: 14 },
-  errorText: { color: '#FF7B72', fontSize: 14, textAlign: 'center', marginVertical: 12 },
+  cover: { width: 160, height: 220, borderRadius: 4, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  coverText: { fontFamily: Fonts.display, fontSize: 64 },
+  title: { fontFamily: Fonts.display, fontSize: 16 },
+  author: { fontSize: 13 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(42,34,24,0.35)', justifyContent: 'flex-end' },
+  modalCard: { borderTopLeftRadius: 6, borderTopRightRadius: 6, padding: 24, maxHeight: '70%', borderWidth: 1 },
+  modalTitle: { fontFamily: Fonts.display, fontSize: 24, marginBottom: 12 },
+  chapterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 8, borderRadius: 4, gap: 12 },
+  chapterRowText: { fontFamily: Fonts.display, fontSize: 16, flex: 1 },
+  dim: { fontFamily: Fonts.mono, fontSize: 12, letterSpacing: 0.6 },
+  errorText: { fontSize: 14, textAlign: 'center', marginVertical: 12 },
 });

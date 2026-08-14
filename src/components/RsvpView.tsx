@@ -1,14 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { Fonts, type Palette } from '@/constants/lumina';
 import {
   chunkAt,
   effectiveWpm,
-  formatEta,
   msPerChunk,
   type ChunkSize,
 } from '@/lib/rsvp';
 import type { RsvpSettings } from '@/lib/storage';
+import { useTheme } from '@/lib/theme';
 
 export type RsvpAudioSync = {
   available: boolean;
@@ -19,6 +21,7 @@ export type RsvpAudioSync = {
   onToggle: () => void;
   onPlayPause: () => void;
   onCycleSpeed: () => void;
+  onStep?: (deltaChunks: number) => void;
 };
 
 type Props = {
@@ -30,10 +33,9 @@ type Props = {
   initialIndex?: number;
   fontSize: number;
   chapterKey: string;
+  onFocusChange?: (focusing: boolean) => void;
   audioSync?: RsvpAudioSync;
 };
-
-const WPM_STEP = 25;
 
 export function RsvpView({
   tokens,
@@ -42,21 +44,23 @@ export function RsvpView({
   onChapterComplete,
   onProgress,
   initialIndex = 0,
-  fontSize,
   chapterKey,
+  onFocusChange,
   audioSync,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const syncing = !!audioSync?.active;
   const [index, setIndex] = useState(() => clampIndex(initialIndex, tokens.length));
   const [playing, setPlaying] = useState(false);
-  const [elapsedSec, setElapsedSec] = useState(0);
+  const [focusing, setFocusing] = useState(false);
 
   const indexRef = useRef(index);
   const playingRef = useRef(playing);
   const settingsRef = useRef(settings);
   const tokensRef = useRef(tokens);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedRef = useRef(false);
 
   indexRef.current = index;
@@ -64,19 +68,17 @@ export function RsvpView({
   settingsRef.current = settings;
   tokensRef.current = tokens;
 
-  // Follow audio word index when syncing
   useEffect(() => {
     if (!syncing) return;
     setIndex(clampIndex(audioSync!.externalIndex, tokens.length));
   }, [syncing, audioSync?.externalIndex, tokens.length]);
 
-  // Reset when chapter changes
   useEffect(() => {
     completedRef.current = false;
     const start = clampIndex(initialIndex, tokens.length);
     setIndex(start);
     setPlaying(false);
-    setElapsedSec(0);
+    setFocusing(false);
     clearTimer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chapterKey]);
@@ -85,61 +87,23 @@ export function RsvpView({
     onProgress(index);
   }, [index, onProgress]);
 
-  // Detect end in sync mode
-  useEffect(() => {
-    if (!syncing || !audioSync) return;
-    if (
-      audioSync.playing === false &&
-      tokens.length > 0 &&
-      audioSync.externalIndex >= tokens.length - 1 &&
-      !completedRef.current
-    ) {
-      // parent fires chapter complete on audio end; no-op here
-    }
-  }, [syncing, audioSync, tokens.length]);
+  const isPlaying = syncing ? !!audioSync?.playing : playing;
 
   useEffect(() => {
     if (syncing) {
       clearTimer();
-      if (elapsedRef.current) {
-        clearInterval(elapsedRef.current);
-        elapsedRef.current = null;
-      }
-      if (audioSync?.playing) {
-        elapsedRef.current = setInterval(() => setElapsedSec((s) => s + 1), 1000);
-      }
-      return () => {
-        if (elapsedRef.current) {
-          clearInterval(elapsedRef.current);
-          elapsedRef.current = null;
-        }
-      };
-    }
-
-    if (!playing) {
-      clearTimer();
-      if (elapsedRef.current) {
-        clearInterval(elapsedRef.current);
-        elapsedRef.current = null;
-      }
       return;
     }
-
-    elapsedRef.current = setInterval(() => setElapsedSec((s) => s + 1), 1000);
-    scheduleNext();
-
-    return () => {
+    if (!playing) {
       clearTimer();
-      if (elapsedRef.current) {
-        clearInterval(elapsedRef.current);
-        elapsedRef.current = null;
-      }
-    };
+      return;
+    }
+    scheduleNext();
+    return () => clearTimer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     syncing,
     playing,
-    audioSync?.playing,
     settings.wpm,
     settings.chunkSize,
     settings.pushMode,
@@ -147,6 +111,30 @@ export function RsvpView({
     settings.targetWpm,
     chapterKey,
   ]);
+
+  useEffect(() => {
+    onFocusChange?.(focusing);
+  }, [focusing, onFocusChange]);
+
+  useEffect(() => {
+    if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+    if (isPlaying) {
+      focusTimerRef.current = setTimeout(() => setFocusing(true), 1400);
+    } else {
+      setFocusing(false);
+    }
+    return () => {
+      if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+    };
+  }, [isPlaying, index]);
+
+  function wakeFocus() {
+    setFocusing(false);
+    if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+    if (isPlaying) {
+      focusTimerRef.current = setTimeout(() => setFocusing(true), 1400);
+    }
+  }
 
   function clearTimer() {
     if (timerRef.current) {
@@ -197,7 +185,9 @@ export function RsvpView({
 
   const total = tokens.length;
   const display = chunkAt(tokens, index, settings.chunkSize);
-  const progress = total > 0 ? Math.min(1, index / total) : 0;
+  const chunkCount = total > 0 ? Math.ceil(total / settings.chunkSize) : 0;
+  const chunkIdx = total > 0 ? Math.floor(Math.min(index, total - 1) / settings.chunkSize) : 0;
+  const progress = chunkCount > 0 ? (chunkIdx + 1) / chunkCount : 0;
   const currentWpm = effectiveWpm({
     wpm: settings.wpm,
     pushMode: settings.pushMode,
@@ -206,35 +196,28 @@ export function RsvpView({
     wordIndex: index,
     totalWords: total,
   });
-  const remaining = Math.max(0, total - index);
-  const eta = formatEta(remaining, currentWpm);
-  const isPlaying = syncing ? !!audioSync?.playing : playing;
+
+  const remainingText = remainingLabel(chunkCount, chunkIdx, currentWpm, settings.chunkSize);
+  const canPrev = chunkIdx > 0;
+  const canNext = chunkCount > 0 && chunkIdx < chunkCount - 1;
+  const longClass = display.length > 28 ? 'xlong' : display.length > 16 ? 'long' : 'normal';
 
   const patch = (partial: Partial<RsvpSettings>) => {
     onSettingsChange({ ...settings, ...partial });
   };
 
-  const bumpWpm = (delta: number) => {
-    const next = Math.max(100, Math.min(1000, settings.wpm + delta));
-    patch({ wpm: next });
+  const setWpm = (val: number) => {
+    patch({ wpm: Math.max(60, Math.min(1000, Math.round(val / 10) * 10)) });
+    wakeFocus();
   };
 
-  const setChunk = (n: ChunkSize) => patch({ chunkSize: n });
-
-  const togglePush = () => {
-    const on = !settings.pushMode;
-    patch({
-      pushMode: on,
-      ...(on ? { startWpm: settings.wpm } : {}),
-    });
-  };
-
-  const bumpPush = (field: 'startWpm' | 'targetWpm', delta: number) => {
-    const next = Math.max(100, Math.min(1000, settings[field] + delta));
-    patch({ [field]: next });
+  const setChunk = (n: ChunkSize) => {
+    patch({ chunkSize: n });
+    wakeFocus();
   };
 
   const togglePlay = () => {
+    wakeFocus();
     if (syncing && audioSync) {
       audioSync.onPlayPause();
       return;
@@ -242,106 +225,158 @@ export function RsvpView({
     setPlaying((p) => !p);
   };
 
+  const step = (delta: number) => {
+    wakeFocus();
+    if (syncing && audioSync?.onStep) {
+      audioSync.onStep(delta);
+      return;
+    }
+    const next = indexRef.current + delta * settings.chunkSize;
+    setIndex(clampIndex(next, tokens.length));
+    if (playingRef.current) {
+      clearTimer();
+      scheduleNext();
+    }
+  };
+
   return (
     <View style={styles.root}>
       <Pressable style={styles.stage} onPress={togglePlay}>
-        <Text style={[styles.chunk, { fontSize: fontSize * 3.6, lineHeight: fontSize * 4.8 }]}>
-          {total === 0 ? 'No text' : display || '✓'}
-        </Text>
-        <Text style={styles.hint}>
-          {isPlaying ? 'Tap to pause' : 'Tap to play'}
-          {syncing ? ' · audio on' : ' · text only (no audio loaded)'}
-        </Text>
+        {total === 0 ? (
+          <Text style={styles.emptyTitle}>Nothing to read yet</Text>
+        ) : (
+          <Animated.Text
+            key={`${chapterKey}:${index}:${settings.chunkSize}`}
+            entering={FadeInDown.duration(90)}
+            style={[
+              styles.word,
+              longClass === 'long' && styles.wordLong,
+              longClass === 'xlong' && styles.wordXlong,
+            ]}
+          >
+            <OrpText text={display || '✓'} accent={colors.accent} />
+          </Animated.Text>
+        )}
       </Pressable>
 
-      <View style={styles.progressBlock}>
-        <View style={styles.progressRow}>
-          <Text style={styles.dim}>{Math.round(progress * 100)}%</Text>
-          <View style={styles.progressBar}>
+      <View style={[styles.deck, focusing && styles.deckFocus]} pointerEvents={focusing ? 'none' : 'auto'}>
+        <View style={styles.progress}>
+          <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
           </View>
-          <Text style={styles.dim}>{syncing ? '' : `${eta} left`}</Text>
+          <View style={styles.progressMeta}>
+            <Text style={styles.meta}>{chunkCount ? `${chunkIdx + 1} / ${chunkCount}` : '0 / 0'}</Text>
+            <Text style={styles.meta}>{remainingText}</Text>
+          </View>
         </View>
-        <Text style={styles.meta}>
-          {Math.min(index, total)} / {total}
-          {syncing
-            ? ` · ${audioSync?.speedLabel ?? '1×'} · Sync`
-            : ` · ${Math.round(currentWpm)} WPM${settings.pushMode ? ' · Push' : ''}`}
-          {' · '}
-          {fmtElapsed(elapsedSec)}
+
+        <View style={styles.controlsRow}>
+          <View style={styles.transport}>
+            <Pressable
+              style={[styles.iconBtn, !canPrev && styles.iconBtnDisabled]}
+              onPress={() => canPrev && step(-1)}
+              disabled={!canPrev}
+            >
+              <Text style={styles.iconGlyph}>‹</Text>
+            </Pressable>
+            <Pressable style={[styles.iconBtn, styles.playBtn]} onPress={togglePlay}>
+              <Text style={styles.playGlyph}>{isPlaying ? '❚❚' : '▶'}</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.iconBtn, !canNext && styles.iconBtnDisabled]}
+              onPress={() => canNext && step(1)}
+              disabled={!canNext}
+            >
+              <Text style={styles.iconGlyph}>›</Text>
+            </Pressable>
+          </View>
+
+          {syncing ? (
+            <Pressable style={styles.speedChip} onPress={audioSync?.onCycleSpeed}>
+              <Text style={styles.speedLabel}>Audio</Text>
+              <Text style={styles.speedVal}>{audioSync?.speedLabel ?? '1×'}</Text>
+            </Pressable>
+          ) : (
+            <WpmSlider wpm={settings.wpm} onChange={setWpm} colors={colors} />
+          )}
+
+          <View style={styles.chunk}>
+            {([1, 2, 3] as ChunkSize[]).map((n) => (
+              <Pressable
+                key={n}
+                style={[styles.chunkBtn, settings.chunkSize === n && styles.chunkBtnActive]}
+                onPress={() => setChunk(n)}
+              >
+                <Text style={[styles.chunkBtnText, settings.chunkSize === n && styles.chunkBtnTextActive]}>
+                  {n}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <Text style={styles.hint}>
+          {syncing ? 'tap · ‹ › · audio sync' : 'tap · ‹ › · speed · 1 2 3 chunk'}
         </Text>
       </View>
-
-      <View style={styles.controls}>
-        {audioSync && (
-          <Pressable
-            style={[styles.btn, audioSync.active && styles.btnSync]}
-            onPress={audioSync.onToggle}
-          >
-            <Text style={styles.btnText}>🔊</Text>
-          </Pressable>
-        )}
-
-        {syncing ? (
-          <Pressable style={styles.btn} onPress={audioSync?.onCycleSpeed}>
-            <Text style={styles.btnText}>{audioSync?.speedLabel ?? '1×'}</Text>
-          </Pressable>
-        ) : (
-          <>
-            <Pressable style={styles.btn} onPress={() => bumpWpm(-WPM_STEP)}>
-              <Text style={styles.btnText}>−</Text>
-            </Pressable>
-            <Text style={styles.wpmLabel}>{settings.wpm}</Text>
-            <Pressable style={styles.btn} onPress={() => bumpWpm(WPM_STEP)}>
-              <Text style={styles.btnText}>+</Text>
-            </Pressable>
-          </>
-        )}
-
-        {([1, 2, 3] as ChunkSize[]).map((n) => (
-          <Pressable
-            key={n}
-            style={[styles.btn, settings.chunkSize === n && styles.btnActive]}
-            onPress={() => setChunk(n)}
-          >
-            <Text style={styles.btnText}>{n}</Text>
-          </Pressable>
-        ))}
-
-        {!syncing && (
-          <Pressable
-            style={[styles.btn, settings.pushMode && styles.btnPush]}
-            onPress={togglePush}
-          >
-            <Text style={styles.btnText}>Push</Text>
-          </Pressable>
-        )}
-
-        <Pressable style={[styles.btn, styles.playBtn]} onPress={togglePlay}>
-          <Text style={[styles.btnText, styles.playText]}>{isPlaying ? '❚❚' : '▶'}</Text>
-        </Pressable>
-      </View>
-
-      {!syncing && settings.pushMode && (
-        <View style={styles.pushRow}>
-          <Pressable style={styles.btnSm} onPress={() => bumpPush('startWpm', -WPM_STEP)}>
-            <Text style={styles.btnText}>−</Text>
-          </Pressable>
-          <Text style={styles.dim}>Start {settings.startWpm}</Text>
-          <Pressable style={styles.btnSm} onPress={() => bumpPush('startWpm', WPM_STEP)}>
-            <Text style={styles.btnText}>+</Text>
-          </Pressable>
-          <Pressable style={styles.btnSm} onPress={() => bumpPush('targetWpm', -WPM_STEP)}>
-            <Text style={styles.btnText}>−</Text>
-          </Pressable>
-          <Text style={styles.dim}>Target {settings.targetWpm}</Text>
-          <Pressable style={styles.btnSm} onPress={() => bumpPush('targetWpm', WPM_STEP)}>
-            <Text style={styles.btnText}>+</Text>
-          </Pressable>
-        </View>
-      )}
     </View>
   );
+}
+
+function OrpText({ text, accent }: { text: string; accent: string }) {
+  if (!text) return null;
+  const orpIdx = Math.max(0, Math.floor(text.length * 0.4));
+  return (
+    <>
+      {text.slice(0, orpIdx)}
+      <Text style={{ color: accent }}>{text.charAt(orpIdx)}</Text>
+      {text.slice(orpIdx + 1)}
+    </>
+  );
+}
+
+function WpmSlider({
+  wpm,
+  onChange,
+  colors,
+}: {
+  wpm: number;
+  onChange: (n: number) => void;
+  colors: Palette;
+}) {
+  const trackW = useRef(1);
+  const min = 60;
+  const max = 1000;
+  const pct = (wpm - min) / (max - min);
+
+  return (
+    <View style={sliderStyles.wrap}>
+      <Text style={[sliderStyles.label, { color: colors.muted }]}>Speed</Text>
+      <Pressable
+        style={[sliderStyles.track, { backgroundColor: colors.border }]}
+        onLayout={(e) => { trackW.current = e.nativeEvent.layout.width; }}
+        onPress={(e) => {
+          const x = e.nativeEvent.locationX;
+          const p = Math.max(0, Math.min(1, x / trackW.current));
+          onChange(min + p * (max - min));
+        }}
+      >
+        <View style={[sliderStyles.fill, { width: `${pct * 100}%`, backgroundColor: colors.fg }]} />
+        <View style={[sliderStyles.thumb, { left: `${pct * 100}%`, backgroundColor: colors.fg, borderColor: colors.bg }]} />
+      </Pressable>
+      <Text style={[sliderStyles.val, { color: colors.fg }]}>{wpm} wpm</Text>
+    </View>
+  );
+}
+
+function remainingLabel(chunkCount: number, chunkIdx: number, wpm: number, chunkSize: number): string {
+  if (!chunkCount) return '— remaining';
+  const left = Math.max(0, chunkCount - chunkIdx - 1);
+  const rate = wpm / chunkSize;
+  const seconds = rate > 0 ? Math.ceil((left / rate) * 60) : 0;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s remaining` : `${s}s remaining`;
 }
 
 function clampIndex(i: number, len: number): number {
@@ -349,73 +384,157 @@ function clampIndex(i: number, len: number): number {
   return Math.max(0, Math.min(Math.floor(i), len - 1));
 }
 
-function fmtElapsed(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
+function makeStyles(c: Palette) {
+  return StyleSheet.create({
+    root: { flex: 1 },
+    stage: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 20,
+    },
+    word: {
+      fontFamily: Fonts.display,
+      fontWeight: '400',
+      fontSize: 56,
+      lineHeight: 62,
+      letterSpacing: -0.4,
+      textAlign: 'center',
+      color: c.fg,
+      maxWidth: '92%',
+    },
+    wordLong: { fontSize: 36, lineHeight: 42 },
+    wordXlong: { fontSize: 26, lineHeight: 32 },
+    emptyTitle: {
+      fontFamily: Fonts.display,
+      fontSize: 28,
+      color: c.fg,
+      textAlign: 'center',
+    },
+    deck: {
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      paddingTop: 18,
+      paddingHorizontal: 4,
+      gap: 16,
+      paddingBottom: 4,
+    },
+    deckFocus: { opacity: 0.12 },
+    progress: { gap: 8 },
+    progressTrack: {
+      height: 2,
+      backgroundColor: c.border,
+      borderRadius: 1,
+      overflow: 'hidden',
+    },
+    progressFill: {
+      height: 2,
+      backgroundColor: c.fg,
+      borderRadius: 1,
+    },
+    progressMeta: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'baseline',
+    },
+    meta: {
+      fontFamily: Fonts.mono,
+      fontSize: 11,
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+      color: c.muted,
+    },
+    controlsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      flexWrap: 'wrap',
+    },
+    transport: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    iconBtn: {
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 4,
+    },
+    iconBtnDisabled: { opacity: 0.3 },
+    playBtn: { width: 56, height: 56, minWidth: 56, minHeight: 56, borderColor: c.fg },
+    iconGlyph: { color: c.fg, fontSize: 22, lineHeight: 24 },
+    playGlyph: { color: c.fg, fontSize: 16 },
+    speedChip: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 120 },
+    speedLabel: {
+      fontFamily: Fonts.mono,
+      fontSize: 11,
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+      color: c.muted,
+    },
+    speedVal: {
+      fontFamily: Fonts.mono,
+      fontSize: 13,
+      letterSpacing: 0.6,
+      color: c.fg,
+    },
+    chunk: { flexDirection: 'row', gap: 4 },
+    chunkBtn: {
+      minWidth: 36,
+      minHeight: 36,
+      paddingHorizontal: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 4,
+    },
+    chunkBtnActive: { backgroundColor: c.fg, borderColor: c.fg },
+    chunkBtnText: {
+      fontFamily: Fonts.mono,
+      fontSize: 12,
+      letterSpacing: 0.6,
+      color: c.muted,
+    },
+    chunkBtnTextActive: { color: c.bg },
+    hint: {
+      fontFamily: Fonts.mono,
+      fontSize: 10,
+      letterSpacing: 1.6,
+      textTransform: 'uppercase',
+      color: c.muted,
+      textAlign: 'center',
+      paddingTop: 2,
+    },
+  });
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  stage: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
+const sliderStyles = StyleSheet.create({
+  wrap: { flex: 1, minWidth: 160, maxWidth: 340, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  label: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
-  chunk: {
-    color: '#E8E6DF',
-    fontFamily: 'serif',
-    fontWeight: '600',
-    textAlign: 'center',
+  track: { flex: 1, height: 14, justifyContent: 'center', borderRadius: 1 },
+  fill: { height: 2, borderRadius: 1 },
+  thumb: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginLeft: -7,
+    borderWidth: 2,
   },
-  hint: { color: '#7D8590', fontSize: 12, marginTop: 16 },
-  progressBlock: { paddingHorizontal: 16, paddingBottom: 8, gap: 4 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  progressBar: { flex: 1, height: 3, backgroundColor: '#2A323D', borderRadius: 2 },
-  progressFill: { height: 3, backgroundColor: '#F5C518', borderRadius: 2 },
-  dim: { color: '#7D8590', fontSize: 12 },
-  meta: { color: '#7D8590', fontSize: 12, textAlign: 'center' },
-  controls: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#2A323D',
-    flexWrap: 'wrap',
-  },
-  btn: {
-    backgroundColor: '#1A2230',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    minWidth: 40,
-    alignItems: 'center',
-  },
-  btnSm: {
-    backgroundColor: '#1A2230',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    minWidth: 36,
-    alignItems: 'center',
-  },
-  btnActive: { backgroundColor: '#3A4555' },
-  btnPush: { backgroundColor: '#5B3A8C' },
-  btnSync: { backgroundColor: '#2A5A3A' },
-  btnText: { color: '#E8E6DF', fontSize: 14, fontWeight: '600' },
-  playBtn: { backgroundColor: '#F5C518', minWidth: 56 },
-  playText: { color: '#111111', fontSize: 16 },
-  wpmLabel: { color: '#E8E6DF', fontSize: 14, fontWeight: '700', minWidth: 40, textAlign: 'center' },
-  pushRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    paddingBottom: 10,
-    paddingHorizontal: 8,
+  val: {
+    fontFamily: Fonts.mono,
+    fontSize: 13,
+    letterSpacing: 0.6,
+    minWidth: 64,
+    textAlign: 'right',
   },
 });

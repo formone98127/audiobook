@@ -1,0 +1,984 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Lumina RSVP — Elegant Speed Reader</title>
+  <style>
+    /* ============================================================
+       Editorial — Monocle/FT Magazine, tuned for Lagom
+       Paper-white canvas, serif display, system body, ink chrome,
+       single terracotta accent reserved for the focal point.
+       ============================================================ */
+    :root {
+      --bg:      oklch(98% 0.004 95);
+      --surface: oklch(100% 0.002 95);
+      --fg:      oklch(20% 0.018 70);
+      --muted:   oklch(48% 0.012 70);
+      --border:  oklch(90% 0.006 95);
+      --accent:  oklch(52% 0.10 28);
+
+      --font-display: 'Iowan Old Style', 'Charter', Georgia, serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --font-mono:    ui-monospace, 'IBM Plex Mono', Menlo, monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:      oklch(15% 0.008 70);
+        --surface: oklch(18% 0.01 70);
+        --fg:      oklch(96% 0.004 95);
+        --muted:   oklch(65% 0.012 95);
+        --border:  oklch(30% 0.015 70);
+        --accent:  oklch(60% 0.12 28);
+      }
+      meta[name="theme-color"] { content: #000000; }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      font: 16px/1.5 var(--font-body);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body { display: flex; }
+
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 1440px;
+      margin: 0 auto;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      padding: 22px 28px calc(22px + env(safe-area-inset-bottom));
+      gap: 18px;
+    }
+
+    /* ---------- Top bar ---------- */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      transition: opacity 0.45s ease;
+    }
+    .brand {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+    }
+    .brand span { color: var(--accent); }
+    .edit-btn {
+      background: transparent;
+      border: 0;
+      padding: 8px 0;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color 0.15s;
+      border-radius: 4px;
+    }
+    .edit-btn:hover { color: var(--fg); }
+
+    /* ---------- Reader display ---------- */
+    .reader {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 0;
+    }
+    .rsvp-word {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: clamp(3.5rem, 14vw, 8rem);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      text-align: center;
+      color: var(--fg);
+      text-wrap: pretty;
+      max-width: min(92vw, 16em);
+      overflow-wrap: anywhere;
+      transition: font-size 0.2s ease;
+      will-change: transform, opacity, filter;
+    }
+    .rsvp-word.long  { font-size: clamp(2.4rem, 9vw, 4.5rem); }
+    .rsvp-word.xlong { font-size: clamp(1.7rem, 6vw, 3.2rem); }
+    .rsvp-word .orp { color: var(--accent); }
+    .rsvp-word.anim { animation: wordIn 90ms ease-out; }
+    .rsvp-word.hidden { display: none; }
+    @keyframes wordIn {
+      from { opacity: 0; transform: translateY(6px); filter: blur(4px); }
+      to   { opacity: 1; transform: none;      filter: none; }
+    }
+
+    /* ---------- Empty state ---------- */
+    .empty-state {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 24px;
+    }
+    .empty-state.hidden { display: none; }
+    .empty-title {
+      font-family: var(--font-display);
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      letter-spacing: -0.02em;
+    }
+    .empty-sub {
+      color: var(--muted);
+      font-size: 15px;
+      max-width: 34ch;
+    }
+    .empty-state .btn-primary {
+      margin-top: 8px;
+      background: var(--fg);
+      border: 1px solid var(--fg);
+      color: var(--bg);
+      min-height: 44px;
+      padding: 0 22px;
+      border-radius: 4px;
+      font-size: 14px;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+    }
+    .empty-state .btn-primary:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--surface);
+    }
+
+    /* ---------- Control deck ---------- */
+    .controldeck {
+      border-top: 1px solid var(--border);
+      padding-top: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transition: opacity 0.45s ease;
+    }
+
+    /* Focus state: chrome recedes, the word stays. */
+    .app.focusing .topbar       { opacity: 0.12; }
+    .app.focusing .controldeck  { opacity: 0.12; pointer-events: none; }
+
+    .progress {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .progress-track {
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--fg);
+      border-radius: 1px;
+      transition: width 0.25s ease;
+    }
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .transport {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .transport .icon-btn {
+      min-width: 44px;
+      min-height: 44px;
+      display: grid;
+      place-items: center;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--fg);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, color 0.15s, opacity 0.15s, transform 0.1s;
+    }
+    .transport .icon-btn:hover:not(:disabled) { border-color: var(--fg); }
+    .transport .icon-btn:active:not(:disabled) { transform: translateY(1px); }
+    .transport .icon-btn:disabled {
+      opacity: 0.3;
+      cursor: default;
+      border-color: var(--border);
+      color: var(--muted);
+    }
+    .transport .icon-btn svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+    }
+    .transport .play-btn {
+      width: 56px;
+      min-width: 56px;
+      min-height: 56px;
+      height: 56px;
+      border-color: var(--fg);
+      position: relative;
+    }
+    .transport .play-btn:hover:not(:disabled) {
+      background: var(--fg);
+      color: var(--bg);
+    }
+    .play-btn .icon-pause { display: none; }
+    .play-btn.playing .icon-play  { display: none; }
+    .play-btn.playing .icon-pause { display: block; }
+
+    .speed {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 180px;
+      max-width: 340px;
+    }
+    .speed-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .speed input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      outline: none;
+      cursor: pointer;
+    }
+    .speed input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--fg);
+      border: 2px solid var(--bg);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .speed input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent); }
+    .speed input[type="range"]::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--fg);
+      border: 2px solid var(--bg);
+      cursor: pointer;
+    }
+    .speed input[type="range"]::-moz-range-thumb:hover { background: var(--accent); }
+    .speed-val {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      min-width: 52px;
+      text-align: right;
+      color: var(--fg);
+    }
+
+    .chunk { display: flex; gap: 4px; }
+    .chunk button {
+      min-width: 36px;
+      min-height: 36px;
+      padding: 0 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.1s;
+    }
+    .chunk button:hover { border-color: var(--fg); color: var(--fg); }
+    .chunk button:active { transform: translateY(1px); }
+    .chunk button.active {
+      background: var(--fg);
+      border-color: var(--fg);
+      color: var(--bg);
+    }
+
+    .hint {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+      text-align: center;
+      padding-top: 2px;
+    }
+
+    /* ---------- Focus-visible (a11y) ---------- */
+    .edit-btn:focus-visible,
+    .icon-btn:focus-visible,
+    .chunk button:focus-visible,
+    .panel-actions button:focus-visible,
+    .empty-state .btn-primary:focus-visible,
+    .speed input[type="range"]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    /* ---------- Text overlay ---------- */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      z-index: 100;
+    }
+    .overlay.open { display: flex; }
+    .panel {
+      width: 100%;
+      max-width: 620px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .panel h2 {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: 24px;
+      letter-spacing: -0.02em;
+    }
+    .panel p {
+      font-size: 14px;
+      color: var(--muted);
+      margin-top: -12px;
+    }
+    .panel textarea {
+      width: 100%;
+      min-height: 260px;
+      padding: 16px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--fg);
+      font-family: var(--font-display);
+      font-size: 16px;
+      line-height: 1.7;
+      resize: vertical;
+      outline: none;
+    }
+    .panel textarea:focus { border-color: var(--muted); }
+    .panel-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+    .panel-actions button {
+      min-height: 44px;
+      padding: 0 22px;
+      border-radius: 4px;
+      font-size: 14px;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+    }
+    .panel-actions button:active { transform: translateY(1px); }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--fg);
+    }
+    .btn-secondary:hover { border-color: var(--fg); }
+    .btn-primary {
+      background: var(--fg);
+      border: 1px solid var(--fg);
+      color: var(--bg);
+    }
+    .btn-primary:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--surface);
+    }
+
+    /* ---------- Reduced motion ---------- */
+    @media (prefers-reduced-motion: reduce) {
+      .rsvp-word.anim { animation: none; }
+      .topbar, .controldeck, .progress-fill, .rsvp-word { transition: none; }
+    }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 560px) {
+      .app { padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); gap: 12px; }
+      .rsvp-word { font-size: clamp(2.6rem, 12vw, 5rem); }
+      .rsvp-word.long  { font-size: clamp(1.9rem, 7vw, 3rem); }
+      .rsvp-word.xlong { font-size: clamp(1.4rem, 5vw, 2.2rem); }
+      .controls-row { flex-direction: column; align-items: stretch; }
+      .speed { max-width: none; }
+      .transport { justify-content: center; }
+      .chunk { justify-content: center; }
+      .progress-meta { gap: 8px; flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="appEl">
+
+    <header class="topbar">
+      <div class="brand">Lumina <span>RSVP</span></div>
+      <button class="edit-btn" id="editBtn" type="button">Edit text</button>
+    </header>
+
+    <main class="reader">
+      <div class="rsvp-word" id="rsvpWord" aria-live="off" aria-label="Current reading chunk"></div>
+
+      <div class="empty-state hidden" id="emptyState">
+        <div class="empty-title">Nothing to read yet</div>
+        <p class="empty-sub">Paste a passage, or start from the sample, and the words will meet your eyes one at a time.</p>
+        <button class="btn-primary" id="emptyAddBtn" type="button">Add text</button>
+      </div>
+    </main>
+
+    <footer class="controldeck">
+      <div class="progress">
+        <div class="progress-track" id="progressTrack" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-meta">
+          <span id="positionLabel">0 / 0</span>
+          <span id="remainingLabel">— remaining</span>
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <div class="transport">
+          <button id="prevBtn" class="icon-btn" type="button" aria-label="Previous chunk" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>
+          </button>
+          <button id="playBtn" class="play-btn icon-btn" type="button" aria-label="Play">
+            <svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>
+            <svg class="icon-pause" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.4" height="14" rx="1" fill="currentColor"/><rect x="14.1" y="5" width="3.4" height="14" rx="1" fill="currentColor"/></svg>
+          </button>
+          <button id="nextBtn" class="icon-btn" type="button" aria-label="Next chunk">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg>
+          </button>
+        </div>
+
+        <div class="speed">
+          <span class="speed-label">Speed</span>
+          <input type="range" id="speedSlider" min="60" max="1000" step="10" value="300" />
+          <span class="speed-val" id="speedVal">300 wpm</span>
+        </div>
+
+        <div class="chunk" role="group" aria-label="Words per chunk">
+          <button type="button" data-size="1" class="active">1</button>
+          <button type="button" data-size="2">2</button>
+          <button type="button" data-size="3">3</button>
+        </div>
+      </div>
+
+      <div class="hint">space · ← → · ↑↓ speed · 1 2 3 chunk</div>
+    </footer>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="panel" role="dialog" aria-modal="true" aria-labelledby="overlayTitle">
+      <h2 id="overlayTitle">Reading text</h2>
+      <p>Paste your own passage or adjust the sample. Preserved for your next visit.</p>
+      <textarea id="textArea" spellcheck="false"></textarea>
+      <div class="panel-actions">
+        <button class="btn-secondary" id="sampleBtn" type="button">Use sample passage</button>
+        <button class="btn-secondary" id="closePanel" type="button">Cancel</button>
+        <button class="btn-primary" id="applyText" type="button">Start reading</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Offscreen status for screen readers — announces state changes only,
+       never every word of the RSVP stream. -->
+  <div class="visually-hidden" role="status" aria-live="polite" id="srStatus"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var STORE = 'lumina:rsvp:3';
+
+      var sampleText = [
+        'The waves crashed against the shore with a rhythm that felt older than memory.',
+        'Elena stood at the edge of the water, her feet buried in the cool sand, watching the horizon stretch into an endless blue.',
+        'The house behind her was silent, its windows dark and expectant.',
+        'On the third day, she discovered the journal tucked behind a loose board in the attic.',
+        '"The water knows things," the first entry read. "If you stay long enough, it will teach you its language."',
+        'Elena closed the journal and rested her forehead against the cool glass of the attic window.',
+        'Below, the tide was coming in, filling the space between sand and surf with a quiet persistence.'
+      ].join(' ');
+
+      var text = sampleText;
+      var tokens = [];
+      var chunks = [];
+      var currentIdx = 0;
+      var wpm = 300;
+      var chunkSize = 1;
+      var isPlaying = false;
+      var timerId = null;
+      var focusTimer = null;
+      var lastFocusedEl = null;
+
+      var appEl = document.getElementById('appEl');
+      var rsvpWordEl = document.getElementById('rsvpWord');
+      var emptyStateEl = document.getElementById('emptyState');
+      var emptyAddBtn = document.getElementById('emptyAddBtn');
+      var progressFillEl = document.getElementById('progressFill');
+      var progressTrackEl = document.getElementById('progressTrack');
+      var positionLabelEl = document.getElementById('positionLabel');
+      var remainingLabelEl = document.getElementById('remainingLabel');
+      var playBtn = document.getElementById('playBtn');
+      var prevBtn = document.getElementById('prevBtn');
+      var nextBtn = document.getElementById('nextBtn');
+      var speedSlider = document.getElementById('speedSlider');
+      var speedVal = document.getElementById('speedVal');
+      var chunkBtns = Array.prototype.slice.call(document.querySelectorAll('.chunk button'));
+      var editBtn = document.getElementById('editBtn');
+      var overlay = document.getElementById('overlay');
+      var panel = overlay.querySelector('.panel');
+      var textArea = document.getElementById('textArea');
+      var sampleBtn = document.getElementById('sampleBtn');
+      var closePanelBtn = document.getElementById('closePanel');
+      var applyTextBtn = document.getElementById('applyText');
+      var statusEl = document.getElementById('srStatus');
+
+      var focusables = function () {
+        return Array.prototype.slice.call(panel.querySelectorAll('button, textarea')).filter(function (el) {
+          return !el.disabled && el.offsetParent !== null;
+        });
+      };
+
+      function escapeHtml(str) {
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function announce(msg) {
+        statusEl.textContent = '';
+        requestAnimationFrame(function () { statusEl.textContent = msg; });
+      }
+
+      function tokenize() {
+        tokens = text.trim().split(/\s+/).filter(Boolean);
+      }
+
+      function buildChunks() {
+        chunks = [];
+        for (var i = 0; i < tokens.length; i += chunkSize) {
+          chunks.push(tokens.slice(i, i + chunkSize).join(' '));
+        }
+      }
+
+      function saveState() {
+        try {
+          localStorage.setItem(STORE, JSON.stringify({
+            text: text,
+            wpm: wpm,
+            chunkSize: chunkSize,
+            currentIdx: currentIdx
+          }));
+        } catch (_) {}
+      }
+
+      function loadState() {
+        try {
+          var raw = localStorage.getItem(STORE);
+          if (!raw) return;
+          var saved = JSON.parse(raw);
+          if (saved && typeof saved.text === 'string' && saved.text.trim()) {
+            text = saved.text;
+            wpm = Number(saved.wpm) || 300;
+            chunkSize = Number(saved.chunkSize) || 1;
+            currentIdx = Number(saved.currentIdx) || 0;
+          }
+        } catch (_) {}
+      }
+
+      function remainingLabelText() {
+        var left = Math.max(0, chunks.length - currentIdx - 1);
+        if (!chunks.length) return '— remaining';
+        var rate = wpm / chunkSize;
+        var seconds = rate > 0 ? Math.ceil((left / rate) * 60) : 0;
+        var m = Math.floor(seconds / 60);
+        var s = seconds % 60;
+        return m > 0 ? (m + 'm ' + s + 's remaining') : (s + 's remaining');
+      }
+
+      function paintSlider() {
+        var min = 60, max = 1000;
+        var pct = ((wpm - min) / (max - min)) * 100;
+        speedSlider.style.background = 'linear-gradient(to right, var(--fg) 0%, var(--fg) ' + pct + '%, var(--border) ' + pct + '%)';
+      }
+
+      function updateControls() {
+        var prevOk = currentIdx > 0;
+        var nextOk = chunks.length > 0 && currentIdx < chunks.length - 1;
+        prevBtn.disabled = !prevOk;
+        nextBtn.disabled = !nextOk;
+        playBtn.disabled = chunks.length === 0;
+      }
+
+      function render() {
+        var hasText = chunks.length > 0;
+        rsvpWordEl.classList.toggle('hidden', !hasText);
+        emptyStateEl.classList.toggle('hidden', hasText);
+
+        if (!hasText) {
+          progressFillEl.style.width = '0%';
+          progressTrackEl.setAttribute('aria-valuenow', '0');
+          positionLabelEl.textContent = '0 / 0';
+          remainingLabelEl.textContent = '— remaining';
+          pause();
+          updateControls();
+          saveState();
+          return;
+        }
+
+        var chunkText = chunks[currentIdx] || '';
+        var textLen = chunkText.length;
+        var orpIdx = textLen ? Math.max(0, Math.floor(textLen * 0.4)) : 0;
+
+        var html = '';
+        for (var i = 0; i < textLen; i++) {
+          var ch = escapeHtml(chunkText.charAt(i));
+          html += (i === orpIdx) ? '<span class="orp">' + ch + '</span>' : ch;
+        }
+        rsvpWordEl.innerHTML = html;
+
+        rsvpWordEl.classList.remove('long', 'xlong');
+        if (textLen > 16) rsvpWordEl.classList.add('long');
+        if (textLen > 28) rsvpWordEl.classList.add('xlong');
+
+        var delayMs = Math.round(60000 / wpm);
+        var dur = isPlaying ? Math.min(140, Math.max(50, Math.round(delayMs * 0.45))) : 90;
+        rsvpWordEl.style.animationDuration = dur + 'ms';
+        rsvpWordEl.classList.remove('anim');
+        void rsvpWordEl.offsetWidth;
+        rsvpWordEl.classList.add('anim');
+
+        var pct = chunks.length ? ((currentIdx + 1) / chunks.length) * 100 : 0;
+        progressFillEl.style.width = pct + '%';
+        progressTrackEl.setAttribute('aria-valuenow', String(Math.round(pct)));
+        positionLabelEl.textContent = (currentIdx + 1) + ' / ' + chunks.length;
+        remainingLabelEl.textContent = remainingLabelText();
+
+        updateControls();
+        saveState();
+      }
+
+      function armFocus() {
+        clearTimeout(focusTimer);
+        if (isPlaying) {
+          focusTimer = setTimeout(function () {
+            if (isPlaying) appEl.classList.add('focusing');
+          }, 1400);
+        } else {
+          appEl.classList.remove('focusing');
+        }
+      }
+
+      function wakeFocus() {
+        appEl.classList.remove('focusing');
+        armFocus();
+      }
+
+      function setChunkSize(size) {
+        chunkSize = size;
+        chunkBtns.forEach(function (btn) {
+          btn.classList.toggle('active', Number(btn.getAttribute('data-size')) === chunkSize);
+        });
+        buildChunks();
+        if (currentIdx >= chunks.length) currentIdx = chunks.length - 1;
+        render();
+        announce('Chunk size ' + chunkSize);
+      }
+
+      function setWpm(val) {
+        wpm = Math.max(60, Math.min(1000, val));
+        speedSlider.value = String(wpm);
+        speedVal.textContent = wpm + ' wpm';
+        paintSlider();
+        saveState();
+        if (isPlaying) {
+          clearTimeout(timerId);
+          scheduleNext();
+        }
+      }
+
+      function play() {
+        if (isPlaying || !chunks.length) return;
+        isPlaying = true;
+        playBtn.classList.add('playing');
+        playBtn.setAttribute('aria-label', 'Pause');
+        announce('Playing');
+        armFocus();
+        scheduleNext();
+      }
+
+      function pause() {
+        if (!isPlaying) {
+          // Still ensure clean chrome state when called while stopped.
+          appEl.classList.remove('focusing');
+          clearTimeout(focusTimer);
+          return;
+        }
+        isPlaying = false;
+        clearTimeout(timerId);
+        playBtn.classList.remove('playing');
+        playBtn.setAttribute('aria-label', 'Play');
+        appEl.classList.remove('focusing');
+        clearTimeout(focusTimer);
+        announce('Paused');
+      }
+
+      function togglePlay() {
+        if (isPlaying) pause();
+        else play();
+      }
+
+      function scheduleNext() {
+        clearTimeout(timerId);
+        var delayMs = Math.max(40, Math.round(60000 / wpm));
+        timerId = setTimeout(function () {
+          if (!isPlaying) return;
+          if (currentIdx < chunks.length - 1) {
+            currentIdx += 1;
+            render();
+            scheduleNext();
+          } else {
+            pause();
+            announce('End of text');
+          }
+        }, delayMs);
+      }
+
+      function next() {
+        if (chunks.length > 0 && currentIdx < chunks.length - 1) {
+          currentIdx += 1;
+          render();
+        }
+        if (isPlaying) {
+          clearTimeout(timerId);
+          scheduleNext();
+        }
+      }
+
+      function prev() {
+        if (currentIdx > 0) {
+          currentIdx -= 1;
+          render();
+        }
+        if (isPlaying) {
+          clearTimeout(timerId);
+          scheduleNext();
+        }
+      }
+
+      function openOverlay() {
+        lastFocusedEl = document.activeElement;
+        textArea.value = text;
+        overlay.classList.add('open');
+        var first = focusables()[0];
+        if (first) first.focus();
+      }
+
+      function closeOverlay() {
+        overlay.classList.remove('open');
+        if (lastFocusedEl && typeof lastFocusedEl.focus === 'function') {
+          lastFocusedEl.focus();
+        } else {
+          editBtn.focus();
+        }
+      }
+
+      function applyCustomText() {
+        var val = textArea.value.trim();
+        text = val;
+        tokenize();
+        buildChunks();
+        currentIdx = 0;
+        pause();
+        render();
+        closeOverlay();
+        if (val) announce('Text loaded, ' + tokens.length + ' words');
+        else announce('Text cleared');
+      }
+
+      function useSample() {
+        textArea.value = sampleText;
+        textArea.focus();
+      }
+
+      // ---- events ----
+      playBtn.addEventListener('click', togglePlay);
+      prevBtn.addEventListener('click', prev);
+      nextBtn.addEventListener('click', next);
+
+      speedSlider.addEventListener('input', function () {
+        setWpm(Number(speedSlider.value));
+      });
+
+      chunkBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          setChunkSize(Number(btn.getAttribute('data-size')));
+        });
+      });
+
+      editBtn.addEventListener('click', openOverlay);
+      emptyAddBtn.addEventListener('click', openOverlay);
+      closePanelBtn.addEventListener('click', closeOverlay);
+      applyTextBtn.addEventListener('click', applyCustomText);
+      sampleBtn.addEventListener('click', useSample);
+
+      overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) closeOverlay();
+      });
+
+      // Wake chrome on any pointer movement during playback.
+      document.addEventListener('pointermove', wakeFocus, { passive: true });
+      document.addEventListener('pointerdown', wakeFocus, { passive: true });
+
+      // Keyboard users wake the chrome when they tab into a control.
+      document.addEventListener('focusin', function (e) {
+        if (appEl.contains(e.target)) {
+          appEl.classList.remove('focusing');
+          armFocus();
+        }
+      });
+
+      // Simple focus trap for the overlay.
+      overlay.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeOverlay();
+          return;
+        }
+        if (e.key !== 'Tab') return;
+        var els = focusables();
+        if (!els.length) return;
+        var first = els[0];
+        var last = els[els.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      });
+
+      document.addEventListener('keydown', function (e) {
+        var tag = e.target && e.target.tagName;
+        if (tag === 'TEXTAREA' || tag === 'INPUT') return;
+        if (overlay.classList.contains('open')) return;
+
+        switch (e.key) {
+          case ' ':
+            e.preventDefault();
+            togglePlay();
+            break;
+          case 'ArrowRight':
+            e.preventDefault();
+            next();
+            wakeFocus();
+            break;
+          case 'ArrowLeft':
+            e.preventDefault();
+            prev();
+            wakeFocus();
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            setWpm(wpm + 10);
+            wakeFocus();
+            break;
+          case 'ArrowDown':
+            e.preventDefault();
+            setWpm(wpm - 10);
+            wakeFocus();
+            break;
+          case '1': setChunkSize(1); wakeFocus(); break;
+          case '2': setChunkSize(2); wakeFocus(); break;
+          case '3': setChunkSize(3); wakeFocus(); break;
+        }
+      });
+
+      // ---- init ----
+      loadState();
+      tokenize();
+      buildChunks();
+      if (currentIdx >= chunks.length) currentIdx = 0;
+      speedSlider.value = String(wpm);
+      speedVal.textContent = wpm + ' wpm';
+      paintSlider();
+      chunkBtns.forEach(function (btn) {
+        btn.classList.toggle('active', Number(btn.getAttribute('data-size')) === chunkSize);
+      });
+      render();
+    })();
+  </script>
+</body>
+</html>

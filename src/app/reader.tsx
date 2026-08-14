@@ -13,10 +13,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RsvpView } from '@/components/RsvpView';
+import { Fonts } from '@/constants/lumina';
 import { audioUrlFor, loadBook, loadTimings } from '@/lib/api';
 import { manifestUrlFor } from '@/lib/config';
 import { lookupWord } from '@/lib/dictionary';
 import { alignmentTokensFromChapter, tokensFromChapter } from '@/lib/rsvp';
+import { useTheme } from '@/lib/theme';
 import {
   loadFontSize,
   loadPosition,
@@ -24,7 +26,6 @@ import {
   loadRsvpPosition,
   loadRsvpSettings,
   loadSpeed,
-  saveFontSize,
   savePosition,
   saveReaderMode,
   saveRsvpPosition,
@@ -48,6 +49,8 @@ function fmtTime(sec: number): string {
 }
 
 export default function ReaderScreen() {
+  const { colors } = useTheme();
+  const [chromeFocus, setChromeFocus] = useState(false);
   const { bookId, chapter: chapterParam } = useLocalSearchParams<{ bookId: string; chapter?: string }>();
   const manifestUrl = bookId ? manifestUrlFor(bookId) : '';
   const initialChapter = chapterParam ? parseInt(chapterParam, 10) : 0;
@@ -97,6 +100,10 @@ export default function ReaderScreen() {
   const restoredRef = useRef(false);
   const lastSaveRef = useRef(0);
   const lastRsvpSaveRef = useRef(0);
+
+  useEffect(() => {
+    if (mode !== 'rsvp' || loadingChapter) setChromeFocus(false);
+  }, [mode, loadingChapter]);
 
   useEffect(() => {
     loadFontSize().then((s) => { if (s) setFontSize(s); });
@@ -338,11 +345,18 @@ export default function ReaderScreen() {
       try {
         player.play();
       } catch {
-        // retry after short delay (web media element not ready)
         setTimeout(() => { try { player.play(); } catch {} }, 300);
       }
     }
   }, [playing, player, syncAvailable]);
+
+  const rsvpStep = useCallback((deltaChunks: number) => {
+    if (!timings) return;
+    const size = rsvpSettings?.chunkSize ?? 1;
+    const next = Math.max(0, Math.min((timings.totalWords || 1) - 1, syncIndex + deltaChunks * size));
+    const seek = timings.timeAtFlatWord(next);
+    if (seek != null) player.seekTo(seek);
+  }, [timings, rsvpSettings?.chunkSize, syncIndex, player]);
 
   const switchMode = async (next: ReaderMode) => {
     if (next === mode) return;
@@ -383,12 +397,6 @@ export default function ReaderScreen() {
     if (bookId) saveSpeed(bookId, SPEEDS[next]);
   };
 
-  const adjustFont = (delta: number) => {
-    const next = Math.max(13, Math.min(28, fontSize + delta));
-    setFontSize(next);
-    saveFontSize(next);
-  };
-
   const toggleSleep = () => {
     if (sleepRemaining != null) { setSleepRemaining(null); return; }
     setSleepRemaining(SLEEP_OPTIONS[0]);
@@ -424,11 +432,11 @@ export default function ReaderScreen() {
 
   if (error && !book) {
     return (
-      <SafeAreaView style={styles.center}>
-        <Text style={styles.errorTitle}>Could not load book</Text>
-        <Text style={styles.errorBody}>{error}</Text>
-        <Pressable style={styles.btn} onPress={() => { setError(null); loadBook(manifestUrl).then(setBook).catch((e) => setError(String(e?.message ?? e))); }}>
-          <Text style={styles.btnText}>Retry</Text>
+      <SafeAreaView style={[styles.center, { backgroundColor: colors.bg }]} edges={['top', 'bottom']}>
+        <Text style={[styles.errorTitle, { color: colors.accent }]}>Could not load book</Text>
+        <Text style={[styles.errorBody, { color: colors.muted }]}>{error}</Text>
+        <Pressable style={[styles.btn, { borderColor: colors.fg }]} onPress={() => { setError(null); loadBook(manifestUrl).then(setBook).catch((e) => setError(String(e?.message ?? e))); }}>
+          <Text style={[styles.btnText, { color: colors.fg }]}>Retry</Text>
         </Pressable>
       </SafeAreaView>
     );
@@ -436,9 +444,9 @@ export default function ReaderScreen() {
 
   if (!book || !rsvpSettings) {
     return (
-      <SafeAreaView style={styles.center}>
-        <ActivityIndicator color="#F5C518" size="large" />
-        <Text style={styles.dim}>Loading...</Text>
+      <SafeAreaView style={[styles.center, { backgroundColor: colors.bg }]} edges={['top', 'bottom']}>
+        <ActivityIndicator color={colors.accent} size="large" />
+        <Text style={[styles.dim, { color: colors.muted }]}>Loading...</Text>
       </SafeAreaView>
     );
   }
@@ -447,58 +455,32 @@ export default function ReaderScreen() {
   const progress = duration > 0 ? t / duration : 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <Pressable style={styles.homeBtn} onPress={goHome}>
-            <Text style={styles.homeBtnText}>⌂</Text>
-          </Pressable>
-          <Text style={styles.bookTitle} numberOfLines={1}>{book.manifest.title}</Text>
-          <Pressable style={styles.homeBtn} onPress={() => adjustFont(-1)}>
-            <Text style={styles.homeBtnText}>A−</Text>
-          </Pressable>
-          <Pressable style={styles.homeBtn} onPress={() => adjustFont(1)}>
-            <Text style={styles.homeBtnText}>A+</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.modeRow}>
-          <Pressable
-            style={[styles.modeBtn, mode === 'rsvp' && styles.modeBtnActive]}
-            onPress={() => switchMode('rsvp')}
-          >
-            <Text style={[styles.modeBtnText, mode === 'rsvp' && styles.modeBtnTextActive]}>RSVP</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.modeBtn, mode === 'audio' && styles.modeBtnActive]}
-            onPress={() => switchMode('audio')}
-          >
-            <Text style={[styles.modeBtnText, mode === 'audio' && styles.modeBtnTextActive]}>Audio</Text>
-          </Pressable>
-        </View>
-
-        <Pressable onPress={() => setPickerOpen(true)}>
-          <Text style={styles.chapterTitle} numberOfLines={1}>
-            {chapterMeta?.title ?? chapter?.title ?? ''} ▾
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]} edges={['top', 'bottom']}>
+      <View style={[styles.topbar, chromeFocus && styles.topbarFocus]} pointerEvents={chromeFocus ? 'none' : 'auto'}>
+        <Pressable onPress={goHome} hitSlop={8}>
+          <Text style={[styles.brand, { color: colors.fg }]}>
+            Lumina <Text style={{ color: colors.accent }}>RSVP</Text>
           </Text>
         </Pressable>
-
-        {mode === 'audio' && (
-          <View style={styles.progressRow}>
-            <Text style={styles.dim}>{fmtTime(t)}</Text>
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-            </View>
-            <Text style={styles.dim}>{fmtTime(duration)}</Text>
-          </View>
-        )}
+        <View style={styles.topbarRight}>
+          <Pressable onPress={() => switchMode(mode === 'rsvp' ? 'audio' : 'rsvp')} hitSlop={8}>
+            <Text style={[styles.editBtn, { color: colors.muted }]}>
+              {mode === 'rsvp' ? 'Audio' : 'RSVP'}
+            </Text>
+          </Pressable>
+          <Pressable onPress={() => setPickerOpen(true)} hitSlop={8}>
+            <Text style={[styles.editBtn, { color: colors.muted }]} numberOfLines={1}>
+              {(chapterMeta?.title ?? chapter?.title ?? 'Chapter').replace(/^CHAPTER\s+/i, '')}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       {mode === 'rsvp' ? (
         loadingChapter ? (
           <View style={styles.centerFlex}>
-            <ActivityIndicator color="#F5C518" />
-            <Text style={styles.dim}>Loading chapter...</Text>
+            <ActivityIndicator color={colors.accent} />
+            <Text style={[styles.dim, { color: colors.muted }]}>Loading chapter...</Text>
           </View>
         ) : (
           <RsvpView
@@ -510,6 +492,7 @@ export default function ReaderScreen() {
             initialIndex={rsvpWordIndex}
             fontSize={fontSize}
             chapterKey={`${bookId}:${chapterIdx}`}
+            onFocusChange={setChromeFocus}
             audioSync={{
               available: true,
               active: syncAvailable,
@@ -519,24 +502,32 @@ export default function ReaderScreen() {
               onToggle: () => { void toggleRsvpAudioSync(); },
               onPlayPause: rsvpPlayPause,
               onCycleSpeed: cycleSpeed,
+              onStep: rsvpStep,
             }}
           />
         )
       ) : (
         <>
-          <View style={styles.body}>
+          <View style={styles.progressRow}>
+            <Text style={[styles.dim, { color: colors.muted }]}>{fmtTime(t)}</Text>
+            <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+              <View style={[styles.progressFill, { width: `${progress * 100}%`, backgroundColor: colors.fg }]} />
+            </View>
+            <Text style={[styles.dim, { color: colors.muted }]}>{fmtTime(duration)}</Text>
+          </View>
+          <View style={[styles.body, { backgroundColor: colors.bg }]}>
             <ScrollView
-              style={styles.scroll}
+              style={{ flex: 1, backgroundColor: colors.bg }}
               contentContainerStyle={styles.scrollContent}
             >
               {loadingChapter && !audioReady ? (
                 <View style={{ alignItems: 'center', marginTop: 40, gap: 8 }}>
-                  <ActivityIndicator color="#F5C518" />
-                  <Text style={styles.dim}>Loading chapter...</Text>
+                  <ActivityIndicator color={colors.accent} />
+                  <Text style={[styles.dim, { color: colors.muted }]}>Loading chapter...</Text>
                 </View>
               ) : (
                 paragraphs.map((sents, pi) => (
-                  <Text key={pi} style={[styles.paragraph, { fontSize, lineHeight: fontSize * 1.65 }]}>
+                  <Text key={pi} style={[styles.paragraph, { color: colors.fg, fontSize, lineHeight: fontSize * 1.65 }]}>
                     {sents.map((text, si) => {
                       const words = text.split(/(\s+)/);
                       return (
@@ -563,28 +554,28 @@ export default function ReaderScreen() {
               )}
             </ScrollView>
             {buffering && audioReady && (
-              <View style={styles.bufferOverlay}>
-                <ActivityIndicator color="#F5C518" size="small" />
-                <Text style={styles.dim}>Buffering...</Text>
+              <View style={[styles.bufferOverlay, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <ActivityIndicator color={colors.accent} size="small" />
+                <Text style={[styles.dim, { color: colors.muted }]}>Buffering...</Text>
               </View>
             )}
           </View>
 
-          <View style={styles.controls}>
-            <Pressable style={styles.btn} onPress={() => seekBy(-15)}>
-              <Text style={styles.btnText}>-15s</Text>
+          <View style={[styles.controls, { borderTopColor: colors.border }]}>
+            <Pressable style={[styles.iconBtn, { borderColor: colors.border }]} onPress={() => seekBy(-15)}>
+              <Text style={[styles.btnText, { color: colors.fg }]}>-15s</Text>
             </Pressable>
-            <Pressable style={[styles.btn, styles.playBtn]} onPress={() => (playing ? player.pause() : player.play())}>
-              <Text style={[styles.btnText, styles.playText]}>{playing ? '❚❚' : '▶'}</Text>
+            <Pressable style={[styles.iconBtn, styles.playBtn, { borderColor: colors.fg }]} onPress={() => (playing ? player.pause() : player.play())}>
+              <Text style={[styles.btnText, { color: colors.fg }]}>{playing ? '❚❚' : '▶'}</Text>
             </Pressable>
-            <Pressable style={styles.btn} onPress={() => seekBy(15)}>
-              <Text style={styles.btnText}>+15s</Text>
+            <Pressable style={[styles.iconBtn, { borderColor: colors.border }]} onPress={() => seekBy(15)}>
+              <Text style={[styles.btnText, { color: colors.fg }]}>+15s</Text>
             </Pressable>
-            <Pressable style={styles.btn} onPress={cycleSpeed}>
-              <Text style={styles.btnText}>{SPEEDS[speedIdx]}×</Text>
+            <Pressable style={[styles.iconBtn, { borderColor: colors.border }]} onPress={cycleSpeed}>
+              <Text style={[styles.btnText, { color: colors.fg }]}>{SPEEDS[speedIdx]}×</Text>
             </Pressable>
-            <Pressable style={[styles.btn, sleepRemaining != null && styles.sleepBtnActive]} onPress={toggleSleep} onLongPress={cycleSleep}>
-              <Text style={styles.btnText}>{sleepRemaining != null ? `${sleepRemaining}'` : '☾'}</Text>
+            <Pressable style={[styles.iconBtn, { borderColor: sleepRemaining != null ? colors.accent : colors.border }]} onPress={toggleSleep} onLongPress={cycleSleep}>
+              <Text style={[styles.btnText, { color: colors.fg }]}>{sleepRemaining != null ? `${sleepRemaining}'` : '☾'}</Text>
             </Pressable>
           </View>
         </>
@@ -592,11 +583,11 @@ export default function ReaderScreen() {
 
       {definition && (
         <View
-          style={[styles.defBox, { top: definition.y + 20, left: Math.max(20, Math.min(definition.x - 100, 9999)) }]}
+          style={[styles.defBox, { backgroundColor: colors.surface, borderColor: colors.accent, top: definition.y + 20, left: Math.max(20, Math.min(definition.x - 100, 9999)) }]}
           pointerEvents="none"
         >
-          <Text style={styles.defWord}>{definition.word}</Text>
-          <Text style={styles.defText}>
+          <Text style={[styles.defWord, { color: colors.accent }]}>{definition.word}</Text>
+          <Text style={[styles.defText, { color: colors.fg }]}>
             {defLoading ? 'Looking up...' : definition.text}
           </Text>
         </View>
@@ -604,17 +595,17 @@ export default function ReaderScreen() {
 
       <Modal visible={pickerOpen} transparent animationType="slide" onRequestClose={() => setPickerOpen(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setPickerOpen(false)}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Chapters</Text>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.fg }]}>Chapters</Text>
             <ScrollView>
               {book.manifest.chapters.map((c) => (
                 <Pressable
                   key={c.index}
-                  style={[styles.chapterRow, c.index === chapterIdx && styles.chapterRowActive]}
+                  style={[styles.chapterRow, c.index === chapterIdx && { backgroundColor: colors.bg }]}
                   onPress={() => pickChapter(c.index)}
                 >
-                  <Text style={styles.chapterRowText}>{c.title}</Text>
-                  <Text style={styles.dim}>{fmtTime(c.duration)}</Text>
+                  <Text style={[styles.chapterRowText, { color: colors.fg }]}>{c.title}</Text>
+                  <Text style={[styles.dim, { color: colors.muted }]}>{fmtTime(c.duration)}</Text>
                 </Pressable>
               ))}
             </ScrollView>
@@ -626,50 +617,35 @@ export default function ReaderScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B0F14' },
-  center: { flex: 1, backgroundColor: '#0B0F14', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
+  container: { flex: 1, paddingHorizontal: 20, paddingTop: 8 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
   centerFlex: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  header: { paddingHorizontal: 16, paddingVertical: 10, gap: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#2A323D' },
-  headerTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  homeBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#1A2230', alignItems: 'center', justifyContent: 'center' },
-  homeBtnText: { color: '#E8E6DF', fontSize: 16 },
-  bookTitle: { color: '#F5C518', fontSize: 13, fontWeight: '600', letterSpacing: 0.4, flex: 1 },
-  modeRow: { flexDirection: 'row', gap: 8 },
-  modeBtn: {
-    flex: 1,
-    backgroundColor: '#1A2230',
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  modeBtnActive: { backgroundColor: '#F5C518' },
-  modeBtnText: { color: '#7D8590', fontSize: 13, fontWeight: '700' },
-  modeBtnTextActive: { color: '#111111' },
-  chapterTitle: { color: '#E8E6DF', fontSize: 17, fontWeight: '700' },
-  dim: { color: '#7D8590', fontSize: 12 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  progressBar: { flex: 1, height: 3, backgroundColor: '#2A323D', borderRadius: 2 },
-  progressFill: { height: 3, backgroundColor: '#F5C518', borderRadius: 2 },
-  body: { flex: 1, backgroundColor: '#0B0F14' },
-  scroll: { flex: 1, backgroundColor: '#0B0F14' },
-  scrollContent: { backgroundColor: '#0B0F14', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 40 },
-  paragraph: { color: '#D8D5CC', fontFamily: 'serif', marginBottom: 18 },
-  bufferOverlay: { position: 'absolute', top: 10, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1A2230', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
-  controls: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#2A323D' },
-  btn: { backgroundColor: '#1A2230', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, minWidth: 48, alignItems: 'center' },
-  btnText: { color: '#E8E6DF', fontSize: 14, fontWeight: '600' },
-  playBtn: { backgroundColor: '#F5C518', minWidth: 60 },
-  playText: { color: '#111111', fontSize: 16 },
-  sleepBtnActive: { backgroundColor: '#5B3A8C' },
-  defBox: { position: 'absolute', right: 20, maxWidth: 280, backgroundColor: '#1A2230', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#F5C518', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
-  defWord: { color: '#F5C518', fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  defText: { color: '#E8E6DF', fontSize: 14, lineHeight: 20 },
-  errorTitle: { color: '#FF7B72', fontSize: 17, fontWeight: '700' },
-  errorBody: { color: '#FF7B72', fontSize: 12, textAlign: 'center' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalCard: { backgroundColor: '#131A24', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, maxHeight: '70%' },
-  modalTitle: { color: '#E8E6DF', fontSize: 16, fontWeight: '700', marginBottom: 8 },
-  chapterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, borderRadius: 8, gap: 12 },
-  chapterRowActive: { backgroundColor: '#1A2230' },
-  chapterRowText: { color: '#E8E6DF', fontSize: 14, flex: 1 },
+  topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingVertical: 8, gap: 12 },
+  topbarFocus: { opacity: 0.12 },
+  brand: { fontFamily: Fonts.display, fontSize: 18, letterSpacing: -0.3 },
+  topbarRight: { flexDirection: 'row', alignItems: 'center', gap: 16, flexShrink: 1 },
+  editBtn: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase', maxWidth: 180 },
+  dim: { fontSize: 12 },
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
+  progressBar: { flex: 1, height: 2, borderRadius: 1, overflow: 'hidden' },
+  progressFill: { height: 2, borderRadius: 1 },
+  body: { flex: 1 },
+  scrollContent: { paddingTop: 14, paddingBottom: 40 },
+  paragraph: { fontFamily: Fonts.display, marginBottom: 18 },
+  bufferOverlay: { position: 'absolute', top: 10, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 4, borderWidth: 1 },
+  controls: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingVertical: 12, borderTopWidth: 1, flexWrap: 'wrap' },
+  iconBtn: { minWidth: 44, minHeight: 44, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 4, backgroundColor: 'transparent' },
+  playBtn: { width: 56, height: 56, minWidth: 56 },
+  btn: { borderWidth: 1, borderRadius: 4, paddingVertical: 10, paddingHorizontal: 16, minWidth: 48, alignItems: 'center' },
+  btnText: { fontSize: 14 },
+  defBox: { position: 'absolute', right: 20, maxWidth: 280, borderRadius: 6, padding: 14, borderWidth: 1 },
+  defWord: { fontFamily: Fonts.display, fontSize: 16, marginBottom: 4 },
+  defText: { fontSize: 14, lineHeight: 20 },
+  errorTitle: { fontFamily: Fonts.display, fontSize: 17 },
+  errorBody: { fontSize: 12, textAlign: 'center' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(42,34,24,0.35)', justifyContent: 'flex-end' },
+  modalCard: { borderTopLeftRadius: 6, borderTopRightRadius: 6, padding: 24, maxHeight: '70%', borderWidth: 1 },
+  modalTitle: { fontFamily: Fonts.display, fontSize: 24, marginBottom: 12 },
+  chapterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 8, borderRadius: 4, gap: 12 },
+  chapterRowText: { fontSize: 15, flex: 1, fontFamily: Fonts.display },
 });
