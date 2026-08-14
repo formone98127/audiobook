@@ -87,20 +87,20 @@ export default function Settings() {
           </Pressable>
           <Text style={[styles.label, { color: colors.muted }]}>When on, RSVP follows narration word timings.</Text>
 
-          <Text style={[styles.label, { color: colors.muted }]}>Text vs audio (+ faster / − delayed)</Text>
+          <Text style={[styles.label, { color: colors.muted }]}>Text vs audio</Text>
           <View style={styles.row}>
             <Pressable
               style={[styles.btn, { borderColor: colors.border }]}
               onPress={() => patchRsvp({ syncLeadSec: clampLead((rsvp.syncLeadSec ?? 0.2) - 0.1) })}
             >
-              <Text style={[styles.btnText, { color: colors.fg }]}>−0.1s</Text>
+              <Text style={[styles.btnText, { color: colors.fg }]}>Later</Text>
             </Pressable>
             <Text style={[styles.valueText, { color: colors.fg }]}>{fmtLead(rsvp.syncLeadSec)}</Text>
             <Pressable
               style={[styles.btn, { borderColor: colors.border }]}
               onPress={() => patchRsvp({ syncLeadSec: clampLead((rsvp.syncLeadSec ?? 0.2) + 0.1) })}
             >
-              <Text style={[styles.btnText, { color: colors.fg }]}>+0.1s</Text>
+              <Text style={[styles.btnText, { color: colors.fg }]}>Earlier</Text>
             </Pressable>
           </View>
 

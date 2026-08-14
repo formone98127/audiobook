@@ -114,9 +114,9 @@ export function clampLead(n: number): number {
 
 export function fmtLead(sec: number | undefined): string {
   const n = clampLead(sec ?? 0);
-  if (n === 0) return '0.0s';
-  if (n > 0) return `+${n.toFixed(1)}s faster`;
-  return `${n.toFixed(1)}s delayed`;
+  if (n === 0) return 'on time';
+  if (n > 0) return `${n.toFixed(1)}s earlier`;
+  return `${Math.abs(n).toFixed(1)}s later`;
 }
 
 export async function saveRsvpPosition(bookId: string, pos: SavedRsvpPosition): Promise<void> {

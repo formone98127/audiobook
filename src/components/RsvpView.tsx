@@ -261,6 +261,7 @@ export function RsvpView({
         )}
       </Pressable>
 
+      <View style={styles.deckWrap}>
       <View style={[styles.deck, focusing && styles.deckFocus]} pointerEvents={focusing ? 'none' : 'auto'}>
         <View style={styles.progress}>
           <View style={styles.progressTrack}>
@@ -294,21 +295,10 @@ export function RsvpView({
           </View>
 
           {syncing ? (
-            <View style={styles.syncExtras}>
-              <Pressable style={styles.speedChip} onPress={audioSync?.onCycleSpeed}>
-                <Text style={styles.speedLabel}>Audio</Text>
-                <Text style={styles.speedVal}>{audioSync?.speedLabel ?? '1×'}</Text>
-              </Pressable>
-              <View style={styles.leadRow}>
-                <Pressable style={styles.leadBtn} onPress={() => bumpLead(-0.1)}>
-                  <Text style={styles.leadBtnText}>−0.1s</Text>
-                </Pressable>
-                <Text style={styles.leadVal}>{fmtLead(settings.syncLeadSec)}</Text>
-                <Pressable style={styles.leadBtn} onPress={() => bumpLead(0.1)}>
-                  <Text style={styles.leadBtnText}>+0.1s</Text>
-                </Pressable>
-              </View>
-            </View>
+            <Pressable style={styles.speedChip} onPress={audioSync?.onCycleSpeed}>
+              <Text style={styles.speedLabel}>Audio</Text>
+              <Text style={styles.speedVal}>{audioSync?.speedLabel ?? '1×'}</Text>
+            </Pressable>
           ) : (
             <WpmSlider wpm={settings.wpm} onChange={setWpm} colors={colors} />
           )}
@@ -329,8 +319,21 @@ export function RsvpView({
         </View>
 
         <Text style={styles.hint}>
-          {syncing ? 'tap · ‹ › · text ±0.1s' : 'tap · ‹ › · speed · 1 2 3 chunk'}
+          {syncing ? 'tap · ‹ › · later / earlier' : 'tap · ‹ › · speed · 1 2 3 chunk'}
         </Text>
+      </View>
+
+      {syncing ? (
+        <View style={styles.leadRow}>
+          <Pressable style={styles.leadBtn} onPress={() => bumpLead(-0.1)}>
+            <Text style={styles.leadBtnText}>Later</Text>
+          </Pressable>
+          <Text style={styles.leadVal}>{fmtLead(settings.syncLeadSec)}</Text>
+          <Pressable style={styles.leadBtn} onPress={() => bumpLead(0.1)}>
+            <Text style={styles.leadBtnText}>Earlier</Text>
+          </Pressable>
+        </View>
+      ) : null}
       </View>
     </View>
   );
@@ -447,6 +450,7 @@ function makeStyles(c: Palette) {
       color: c.fg,
       textAlign: 'center',
     },
+    deckWrap: { gap: 12, paddingBottom: 4 },
     deck: {
       borderTopWidth: 1,
       borderTopColor: c.border,
@@ -516,12 +520,17 @@ function makeStyles(c: Palette) {
       letterSpacing: 0.6,
       color: c.fg,
     },
-    syncExtras: { flexDirection: 'row', alignItems: 'center', gap: 16, flexWrap: 'wrap' },
-    leadRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    leadRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      paddingTop: 4,
+    },
     leadBtn: {
-      minWidth: 52,
+      minWidth: 72,
       minHeight: 36,
-      paddingHorizontal: 8,
+      paddingHorizontal: 10,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1,

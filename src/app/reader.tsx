@@ -247,15 +247,16 @@ export default function ReaderScreen() {
     savePosition(bookId, { chapterIdx, currentTime: t });
   }, [t, playing, duration, bookId, chapterIdx, mode]);
 
-  // Drive RSVP flash from audio word timings whenever media is loaded
+  const lead = rsvpSettings?.syncLeadSec ?? 0.2;
+  const flashIndex =
+    mode === 'rsvp' && timings && syncAvailable ? timings.flatWordAt(t, lead) : syncIndex;
+
   useEffect(() => {
-    if (mode !== 'rsvp' || !timings || !syncAvailable) return;
-    const lead = rsvpSettings?.syncLeadSec ?? 0.2;
-    const flat = timings.flatWordAt(t, lead);
-    syncIndexRef.current = flat;
-    setSyncIndex(flat);
-    setRsvpWordIndex(flat);
-  }, [t, mode, timings, syncAvailable, playing, rsvpSettings?.syncLeadSec]);
+    if (mode !== 'rsvp' || !syncAvailable) return;
+    syncIndexRef.current = flashIndex;
+    setSyncIndex(flashIndex);
+    setRsvpWordIndex(flashIndex);
+  }, [flashIndex, mode, syncAvailable]);
 
   useEffect(() => {
     if (mode !== 'audio') return;
@@ -361,13 +362,13 @@ export default function ReaderScreen() {
   const rsvpStep = useCallback((deltaChunks: number) => {
     if (!timings) return;
     const size = rsvpSettings?.chunkSize ?? 1;
-    const next = Math.max(0, Math.min((timings.totalWords || 1) - 1, syncIndex + deltaChunks * size));
+    const next = Math.max(0, Math.min((timings.totalWords || 1) - 1, flashIndex + deltaChunks * size));
     syncIndexRef.current = next;
     setSyncIndex(next);
     setRsvpWordIndex(next);
     const seek = timings.timeAtFlatWord(next);
     if (seek != null) player.seekTo(seek);
-  }, [timings, rsvpSettings?.chunkSize, syncIndex, player]);
+  }, [timings, rsvpSettings?.chunkSize, flashIndex, player]);
 
   const switchMode = async (next: ReaderMode) => {
     if (next === mode) return;
@@ -508,7 +509,7 @@ export default function ReaderScreen() {
             audioSync={{
               available: true,
               active: syncAvailable,
-              externalIndex: syncIndex,
+              externalIndex: flashIndex,
               playing,
               speedLabel: `${SPEEDS[speedIdx]}×`,
               onToggle: () => { void toggleRsvpAudioSync(); },
