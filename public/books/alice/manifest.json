@@ -17,7 +17,7 @@
       },
       "timings": {
         "url": "timings/ch000.json",
-        "bytes": 59260
+        "bytes": 72103
       }
     },
     {
@@ -30,7 +30,7 @@
       },
       "timings": {
         "url": "timings/ch001.json",
-        "bytes": 58481
+        "bytes": 70964
       }
     },
     {
@@ -43,7 +43,7 @@
       },
       "timings": {
         "url": "timings/ch002.json",
-        "bytes": 47374
+        "bytes": 57789
       }
     },
     {
@@ -56,7 +56,7 @@
       },
       "timings": {
         "url": "timings/ch003.json",
-        "bytes": 73548
+        "bytes": 89348
       }
     },
     {
@@ -69,7 +69,7 @@
       },
       "timings": {
         "url": "timings/ch004.json",
-        "bytes": 61358
+        "bytes": 74620
       }
     },
     {
@@ -82,7 +82,7 @@
       },
       "timings": {
         "url": "timings/ch005.json",
-        "bytes": 73385
+        "bytes": 89125
       }
     }
   ]
