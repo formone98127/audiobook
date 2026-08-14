@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { Fonts } from '@/constants/lumina';
 import { useTheme } from '@/lib/theme';
 import { loadBook } from '../lib/api';
@@ -50,9 +51,12 @@ export default function Bookshelf() {
         <Text style={[styles.heading, { color: colors.fg }]}>
           Lumina <Text style={{ color: colors.accent }}>RSVP</Text>
         </Text>
-        <Pressable onPress={() => router.push('/settings')} hitSlop={8}>
-          <Text style={[styles.editBtn, { color: colors.muted }]}>Settings</Text>
-        </Pressable>
+        <View style={styles.headerRight}>
+          <ThemeToggle compact />
+          <Pressable onPress={() => router.push('/settings')} hitSlop={8}>
+            <Text style={[styles.editBtn, { color: colors.muted }]}>Settings</Text>
+          </Pressable>
+        </View>
       </View>
       <ScrollView>
         {CATEGORIES.map((cat) => (
@@ -102,7 +106,8 @@ export default function Bookshelf() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 24, paddingTop: 8 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 24 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   heading: { fontFamily: Fonts.display, fontSize: 28, letterSpacing: -0.4 },
   editBtn: { fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase' },
   categorySection: { marginBottom: 28 },

@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RsvpView } from '@/components/RsvpView';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { Fonts } from '@/constants/lumina';
 import { audioUrlFor, loadBook, loadTimings } from '@/lib/api';
 import { manifestUrlFor } from '@/lib/config';
@@ -74,8 +75,9 @@ export default function ReaderScreen() {
   const [timings, setTimings] = useState<TimingIndex | null>(null);
   const [syncAvailable, setSyncAvailable] = useState(false);
   const [syncIndex, setSyncIndex] = useState(0);
+  const syncIndexRef = useRef(0);
 
-  const player = useAudioPlayer(null, { updateInterval: 50 });
+  const player = useAudioPlayer(null, { updateInterval: 25 });
 
   useEffect(() => () => { try { player.pause(); } catch {} }, [player]);
 
@@ -91,7 +93,7 @@ export default function ReaderScreen() {
   useEffect(() => {
     const needTick = mode === 'audio' || (mode === 'rsvp' && syncAvailable);
     if (!needTick) return;
-    const id = setInterval(() => setTick((v) => v + 1), 50);
+    const id = setInterval(() => setTick((v) => v + 1), 25);
     return () => clearInterval(id);
   }, [mode, syncAvailable]);
 
@@ -130,6 +132,7 @@ export default function ReaderScreen() {
         setChapterIdx(i);
         setRsvpWordIndex(wordIndex);
         setSyncIndex(wordIndex);
+        syncIndexRef.current = wordIndex;
         // Always try to attach audio+timings for RSVP (Pages demo + LAN).
         try {
           const tj = await loadTimings(manifestUrl, i, book.manifest);
@@ -248,9 +251,10 @@ export default function ReaderScreen() {
   useEffect(() => {
     if (mode !== 'rsvp' || !timings || !syncAvailable) return;
     const flat = timings.flatWordAt(t);
+    syncIndexRef.current = flat;
     setSyncIndex(flat);
     setRsvpWordIndex(flat);
-  }, [t, mode, timings, syncAvailable]);
+  }, [t, mode, timings, syncAvailable, playing]);
 
   useEffect(() => {
     if (mode !== 'audio') return;
@@ -280,12 +284,15 @@ export default function ReaderScreen() {
   }, [chapter]);
 
   const tokens = useMemo(() => {
+    if (mode === 'rsvp' && syncAvailable && timings?.tokens) {
+      return timings.tokens;
+    }
     const lang = book?.manifest.language;
     if (mode === 'rsvp' && syncAvailable) {
       return alignmentTokensFromChapter(chapter, lang);
     }
     return tokensFromChapter(chapter, lang);
-  }, [chapter, book?.manifest.language, mode, syncAvailable]);
+  }, [chapter, book?.manifest.language, mode, syncAvailable, timings]);
 
   const onRsvpProgress = useCallback(
     (wordIndex: number) => {
@@ -354,6 +361,9 @@ export default function ReaderScreen() {
     if (!timings) return;
     const size = rsvpSettings?.chunkSize ?? 1;
     const next = Math.max(0, Math.min((timings.totalWords || 1) - 1, syncIndex + deltaChunks * size));
+    syncIndexRef.current = next;
+    setSyncIndex(next);
+    setRsvpWordIndex(next);
     const seek = timings.timeAtFlatWord(next);
     if (seek != null) player.seekTo(seek);
   }, [timings, rsvpSettings?.chunkSize, syncIndex, player]);
@@ -463,6 +473,7 @@ export default function ReaderScreen() {
           </Text>
         </Pressable>
         <View style={styles.topbarRight}>
+          <ThemeToggle compact />
           <Pressable onPress={() => switchMode(mode === 'rsvp' ? 'audio' : 'rsvp')} hitSlop={8}>
             <Text style={[styles.editBtn, { color: colors.muted }]}>
               {mode === 'rsvp' ? 'Audio' : 'RSVP'}
@@ -620,7 +631,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 8 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
   centerFlex: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingVertical: 8, gap: 12 },
+  topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, gap: 12 },
   topbarFocus: { opacity: 0.12 },
   brand: { fontFamily: Fonts.display, fontSize: 18, letterSpacing: -0.3 },
   topbarRight: { flexDirection: 'row', alignItems: 'center', gap: 16, flexShrink: 1 },

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { Fonts } from '@/constants/lumina';
 import type { ChunkSize } from '@/lib/rsvp';
 import {
@@ -18,7 +19,7 @@ import { useTheme } from '@/lib/theme';
 const WPM_STEP = 25;
 
 export default function Settings() {
-  const { colors, theme, toggleTheme } = useTheme();
+  const { colors } = useTheme();
   const [fontSize, setFontSize] = useState(19);
   const [rsvp, setRsvp] = useState<RsvpSettings>(DEFAULT_RSVP_SETTINGS);
 
@@ -155,9 +156,7 @@ export default function Settings() {
 
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.muted }]}>Theme</Text>
-          <Pressable style={[styles.btn, { borderColor: colors.fg }]} onPress={toggleTheme}>
-            <Text style={[styles.btnText, { color: colors.fg }]}>{theme === 'dark' ? 'Dark' : 'Light'}</Text>
-          </Pressable>
+          <ThemeToggle />
         </View>
       </ScrollView>
     </SafeAreaView>

@@ -28,4 +28,6 @@ export type TimingsJson = {
   chapter: number;
   sentences: SentenceTiming[];
   words: WordTiming[];
+  /** Canonical RSVP token stream (matches words 1:1). */
+  tokens?: string[];
 };

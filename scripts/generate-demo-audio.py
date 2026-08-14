@@ -150,7 +150,13 @@ def build_timings_from_bounds(
             continue  # skip empty / illustration-only sentences
         sentences_json.append([si, rows[0][2], rows[-1][3]])
 
-    return {"chapter": chapter["index"], "sentences": sentences_json, "words": words_json}
+    tokens = [tok for _si, _wi, tok in expected]
+    return {
+        "chapter": chapter["index"],
+        "sentences": sentences_json,
+        "words": words_json,
+        "tokens": tokens,
+    }
 
 
 async def process_book(book_id: str, voice: str, cjk: bool) -> None:

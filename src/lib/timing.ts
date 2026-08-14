@@ -7,6 +7,8 @@ export class TimingIndex {
   private wordsBySentence = new Map<number, { start: number; end: number }[]>();
   /** Word starts in sentence-major flat order (matches RSVP token stream). */
   private flatStarts: number[] = [];
+  /** Canonical RSVP tokens (1:1 with flatStarts). */
+  readonly tokens: string[] | null = null;
 
   constructor(json: TimingsJson) {
     for (const [si, wi, start, end] of json.words) {
@@ -31,6 +33,10 @@ export class TimingIndex {
       for (let wi = 0; wi < arr.length; wi++) {
         if (arr[wi]) this.flatStarts.push(arr[wi].start);
       }
+    }
+
+    if (json.tokens && json.tokens.length === this.flatStarts.length) {
+      this.tokens = json.tokens;
     }
   }
 
@@ -99,9 +105,9 @@ export class TimingIndex {
 
   /**
    * Flat word index for time t (sentence-major order).
-   * leadSec shifts lookup — negative delays flash behind audio.
+   * Positive lead pulls the flash ahead of audio (compensates poll/render lag).
    */
-  flatWordAt(t: number, leadSec = -0.15): number {
+  flatWordAt(t: number, leadSec = 0.22): number {
     const tt = Math.max(0, t + leadSec);
     const starts = this.flatStarts;
     if (starts.length === 0) return 0;

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { Fonts, type Palette } from '@/constants/lumina';
 import {
@@ -200,7 +199,6 @@ export function RsvpView({
   const remainingText = remainingLabel(chunkCount, chunkIdx, currentWpm, settings.chunkSize);
   const canPrev = chunkIdx > 0;
   const canNext = chunkCount > 0 && chunkIdx < chunkCount - 1;
-  const longClass = display.length > 28 ? 'xlong' : display.length > 16 ? 'long' : 'normal';
 
   const patch = (partial: Partial<RsvpSettings>) => {
     onSettingsChange({ ...settings, ...partial });
@@ -245,17 +243,7 @@ export function RsvpView({
         {total === 0 ? (
           <Text style={styles.emptyTitle}>Nothing to read yet</Text>
         ) : (
-          <Animated.Text
-            key={`${chapterKey}:${index}:${settings.chunkSize}`}
-            entering={FadeInDown.duration(90)}
-            style={[
-              styles.word,
-              longClass === 'long' && styles.wordLong,
-              longClass === 'xlong' && styles.wordXlong,
-            ]}
-          >
-            <OrpText text={display || '✓'} accent={colors.accent} />
-          </Animated.Text>
+          <OrpWord text={display || '✓'} accent={colors.accent} styles={styles} />
         )}
       </Pressable>
 
@@ -323,15 +311,46 @@ export function RsvpView({
   );
 }
 
-function OrpText({ text, accent }: { text: string; accent: string }) {
-  if (!text) return null;
-  const orpIdx = Math.max(0, Math.floor(text.length * 0.4));
+function orpIndex(len: number): number {
+  if (len <= 1) return 0;
+  if (len <= 5) return 1;
+  if (len <= 9) return 2;
+  if (len <= 13) return 3;
+  return 4;
+}
+
+function OrpWord({
+  text,
+  accent,
+  styles,
+}: {
+  text: string;
+  accent: string;
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  const i = orpIndex(text.length);
+  const before = text.slice(0, i);
+  const pivot = text.charAt(i) || ' ';
+  const after = text.slice(i + 1);
   return (
-    <>
-      {text.slice(0, orpIdx)}
-      <Text style={{ color: accent }}>{text.charAt(orpIdx)}</Text>
-      {text.slice(orpIdx + 1)}
-    </>
+    <View style={styles.orpRow}>
+      <View style={styles.orpSide}>
+        <Text style={[styles.word, styles.orpBefore]} numberOfLines={1}>
+          {before}
+        </Text>
+      </View>
+      <View style={styles.orpPivotBox}>
+        <Text style={[styles.word, styles.orpGhost]} numberOfLines={1}>W</Text>
+        <Text style={[styles.word, styles.orpGlyph, { color: accent }]} numberOfLines={1}>
+          {pivot}
+        </Text>
+      </View>
+      <View style={styles.orpSide}>
+        <Text style={[styles.word, styles.orpAfter]} numberOfLines={1}>
+          {after}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -389,22 +408,52 @@ function makeStyles(c: Palette) {
     root: { flex: 1 },
     stage: {
       flex: 1,
+      justifyContent: 'center',
+      paddingHorizontal: 12,
+    },
+    orpRow: {
+      flexDirection: 'row',
+      width: '100%',
+      alignItems: 'center',
+      height: 72,
+    },
+    orpSide: {
+      flex: 1,
+      height: 72,
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    orpBefore: {
+      textAlign: 'right',
+      width: '100%',
+    },
+    orpAfter: {
+      textAlign: 'left',
+      width: '100%',
+    },
+    orpPivotBox: {
+      height: 72,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingHorizontal: 20,
+    },
+    orpGhost: {
+      opacity: 0,
+    },
+    orpGlyph: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      textAlign: 'center',
     },
     word: {
       fontFamily: Fonts.display,
       fontWeight: '400',
       fontSize: 56,
-      lineHeight: 62,
-      letterSpacing: -0.4,
-      textAlign: 'center',
+      lineHeight: 72,
+      letterSpacing: 0,
       color: c.fg,
-      maxWidth: '92%',
+      includeFontPadding: false,
     },
-    wordLong: { fontSize: 36, lineHeight: 42 },
-    wordXlong: { fontSize: 26, lineHeight: 32 },
     emptyTitle: {
       fontFamily: Fonts.display,
       fontSize: 28,

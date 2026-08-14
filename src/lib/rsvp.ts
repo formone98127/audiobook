@@ -38,7 +38,7 @@ export function alignmentTokensFromChapter(
       if (forceCjk || CJK_RE.test(t)) {
         out.push(...tokenizeCjk(t));
       } else {
-        out.push(...t.split(/\s+/).filter(Boolean));
+        out.push(...t.split(/\s+/).filter((w) => w && !PUNCT_ONLY.test(w)));
       }
     }
   }
