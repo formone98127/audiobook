@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { Fonts, type Palette } from '@/constants/lumina';
 import {
@@ -17,6 +18,7 @@ export type RsvpAudioSync = {
   externalIndex: number;
   playing: boolean;
   speedLabel: string;
+  nudgeSec?: number;
   onToggle: () => void;
   onPlayPause: () => void;
   onCycleSpeed: () => void;
@@ -49,6 +51,7 @@ export function RsvpView({
   audioSync,
 }: Props) {
   const { colors } = useTheme();
+  const { width: winW } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const syncing = !!audioSync?.active;
   const [index, setIndex] = useState(() => clampIndex(initialIndex, tokens.length));
@@ -249,7 +252,13 @@ export function RsvpView({
         {total === 0 ? (
           <Text style={styles.emptyTitle}>Nothing to read yet</Text>
         ) : (
-          <OrpWord text={display || '✓'} accent={colors.accent} styles={styles} />
+          <Animated.Text
+            key={`${chapterKey}:${index}:${settings.chunkSize}`}
+            entering={FadeInDown.duration(90)}
+            style={[styles.word, rsvpType((display || '✓').length, winW)]}
+          >
+            <OrpText text={display || '✓'} accent={colors.accent} />
+          </Animated.Text>
         )}
       </Pressable>
 
@@ -295,6 +304,7 @@ export function RsvpView({
                 <Pressable style={styles.leadBtn} onPress={() => nudge(-0.1)}>
                   <Text style={styles.leadBtnText}>−0.1s</Text>
                 </Pressable>
+                <Text style={styles.leadVal}>{fmtNudge(audioSync?.nudgeSec ?? 0)}</Text>
                 <Pressable style={styles.leadBtn} onPress={() => nudge(0.1)}>
                   <Text style={styles.leadBtnText}>+0.1s</Text>
                 </Pressable>
@@ -327,47 +337,43 @@ export function RsvpView({
   );
 }
 
-function orpIndex(len: number): number {
-  if (len <= 1) return 0;
-  if (len <= 5) return 1;
-  if (len <= 9) return 2;
-  if (len <= 13) return 3;
-  return 4;
+function OrpText({ text, accent }: { text: string; accent: string }) {
+  if (!text) return null;
+  const orpIdx = Math.max(0, Math.floor(text.length * 0.4));
+  return (
+    <>
+      {text.slice(0, orpIdx)}
+      <Text style={{ color: accent }}>{text.charAt(orpIdx)}</Text>
+      {text.slice(orpIdx + 1)}
+    </>
+  );
 }
 
-function OrpWord({
-  text,
-  accent,
-  styles,
-}: {
-  text: string;
-  accent: string;
-  styles: ReturnType<typeof makeStyles>;
-}) {
-  const i = orpIndex(text.length);
-  const before = text.slice(0, i);
-  const pivot = text.charAt(i) || ' ';
-  const after = text.slice(i + 1);
-  return (
-    <View style={styles.orpRow}>
-      <View style={styles.orpSide}>
-        <Text style={[styles.word, styles.orpBefore]} numberOfLines={1}>
-          {before}
-        </Text>
-      </View>
-      <View style={styles.orpPivotBox}>
-        <Text style={[styles.word, styles.orpGhost]} numberOfLines={1}>W</Text>
-        <Text style={[styles.word, styles.orpGlyph, { color: accent }]} numberOfLines={1}>
-          {pivot}
-        </Text>
-      </View>
-      <View style={styles.orpSide}>
-        <Text style={[styles.word, styles.orpAfter]} numberOfLines={1}>
-          {after}
-        </Text>
-      </View>
-    </View>
-  );
+/** HTML: clamp(3.5rem, 14vw, 8rem); long >16; xlong >28. Mobile uses tighter clamps. */
+function rsvpType(len: number, width: number) {
+  const mobile = width <= 560;
+  let min: number;
+  let vw: number;
+  let max: number;
+  if (len > 28) {
+    min = mobile ? 22.4 : 27.2;
+    vw = width * (mobile ? 0.05 : 0.06);
+    max = mobile ? 35.2 : 51.2;
+  } else if (len > 16) {
+    min = mobile ? 30.4 : 38.4;
+    vw = width * (mobile ? 0.07 : 0.09);
+    max = mobile ? 48 : 72;
+  } else {
+    min = mobile ? 41.6 : 56;
+    vw = width * (mobile ? 0.12 : 0.14);
+    max = mobile ? 80 : 128;
+  }
+  const fontSize = Math.min(max, Math.max(min, vw));
+  return {
+    fontSize,
+    lineHeight: fontSize * 1.1,
+    letterSpacing: fontSize * -0.02,
+  };
 }
 
 function WpmSlider({
@@ -419,56 +425,29 @@ function clampIndex(i: number, len: number): number {
   return Math.max(0, Math.min(Math.floor(i), len - 1));
 }
 
+function fmtNudge(sec: number): string {
+  const n = Math.round(sec * 10) / 10;
+  if (n === 0) return '0.0s';
+  if (n > 0) return `+${n.toFixed(1)}s faster`;
+  return `${n.toFixed(1)}s delayed`;
+}
+
 function makeStyles(c: Palette) {
   return StyleSheet.create({
     root: { flex: 1 },
     stage: {
       flex: 1,
+      alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: 12,
-    },
-    orpRow: {
-      flexDirection: 'row',
-      width: '100%',
-      alignItems: 'center',
-      height: 72,
-    },
-    orpSide: {
-      flex: 1,
-      height: 72,
-      justifyContent: 'center',
-      overflow: 'hidden',
-    },
-    orpBefore: {
-      textAlign: 'right',
-      width: '100%',
-    },
-    orpAfter: {
-      textAlign: 'left',
-      width: '100%',
-    },
-    orpPivotBox: {
-      height: 72,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    orpGhost: {
-      opacity: 0,
-    },
-    orpGlyph: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      textAlign: 'center',
+      paddingVertical: 20,
     },
     word: {
       fontFamily: Fonts.display,
       fontWeight: '400',
-      fontSize: 56,
-      lineHeight: 72,
-      letterSpacing: 0,
+      textAlign: 'center',
       color: c.fg,
-      includeFontPadding: false,
+      maxWidth: '92%',
     },
     emptyTitle: {
       fontFamily: Fonts.display,
@@ -562,6 +541,14 @@ function makeStyles(c: Palette) {
       fontSize: 11,
       letterSpacing: 0.6,
       color: c.fg,
+    },
+    leadVal: {
+      fontFamily: Fonts.mono,
+      fontSize: 11,
+      letterSpacing: 0.6,
+      color: c.fg,
+      minWidth: 88,
+      textAlign: 'center',
     },
     chunk: { flexDirection: 'row', gap: 4 },
     chunkBtn: {

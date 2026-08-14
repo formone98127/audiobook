@@ -76,6 +76,7 @@ export default function ReaderScreen() {
   const [syncAvailable, setSyncAvailable] = useState(false);
   const [syncIndex, setSyncIndex] = useState(0);
   const syncIndexRef = useRef(0);
+  const [nudgeSec, setNudgeSec] = useState(0);
 
   const player = useAudioPlayer(null, { updateInterval: 25 });
 
@@ -135,6 +136,7 @@ export default function ReaderScreen() {
         setRsvpWordIndex(wordIndex);
         setSyncIndex(wordIndex);
         syncIndexRef.current = wordIndex;
+        setNudgeSec(0);
         // Always try to attach audio+timings for RSVP (Pages demo + LAN).
         try {
           const tj = await loadTimings(manifestUrl, i, book.manifest);
@@ -376,6 +378,7 @@ export default function ReaderScreen() {
     syncIndexRef.current = next;
     setSyncIndex(next);
     setRsvpWordIndex(next);
+    setNudgeSec(0);
     const seek = timings.timeAtFlatWord(next);
     if (seek != null) player.seekTo(seek);
   }, [timings, rsvpSettings?.chunkSize, syncIndex, player]);
@@ -414,6 +417,7 @@ export default function ReaderScreen() {
   const nudgeAudio = (delta: number) => {
     pinIndexRef.current = syncIndexRef.current;
     pinUntilRef.current = Date.now() + 500;
+    setNudgeSec((n) => Math.round((n + delta) * 10) / 10);
     seekBy(delta);
   };
 
@@ -528,6 +532,7 @@ export default function ReaderScreen() {
               externalIndex: syncIndex,
               playing,
               speedLabel: `${SPEEDS[speedIdx]}×`,
+              nudgeSec,
               onToggle: () => { void toggleRsvpAudioSync(); },
               onPlayPause: rsvpPlayPause,
               onCycleSpeed: cycleSpeed,
