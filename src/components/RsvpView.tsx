@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { Fonts, type Palette } from '@/constants/lumina';
 import {
@@ -251,13 +250,9 @@ export function RsvpView({
         {total === 0 ? (
           <Text style={styles.emptyTitle}>Nothing to read yet</Text>
         ) : (
-          <Animated.Text
-            key={`${chapterKey}:${index}:${settings.chunkSize}`}
-            entering={FadeInDown.duration(90)}
-            style={[styles.word, rsvpType((display || '✓').length, winW)]}
-          >
+          <Text style={[styles.word, rsvpType((display || '✓').length, winW)]}>
             <OrpText text={display || '✓'} accent={colors.accent} />
-          </Animated.Text>
+          </Text>
         )}
       </Pressable>
 
