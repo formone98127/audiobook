@@ -23,6 +23,7 @@ type Props = {
   currentTime: number;
   onPlayPause: () => void;
   onSeek: (sentenceIndex: number) => void;
+  onQuickSettings?: () => void;
 };
 
 const VISIBLE_SENTENCES = 3; // Show 3 paragraphs at once for better context
@@ -38,6 +39,7 @@ export function ReelReader({
   currentTime,
   onPlayPause,
   onSeek,
+  onQuickSettings,
 }: Props) {
   const { height: windowHeight } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(colors, fontSize), [colors, fontSize]);
@@ -95,15 +97,14 @@ export function ReelReader({
     const sentenceHeight = windowHeight / VISIBLE_SENTENCES;
     const newSentence = Math.round(offsetY / sentenceHeight);
 
+    console.log('Scroll event - offsetY:', offsetY, 'calculated sentence:', newSentence, 'current:', currentSentence);
+
     if (newSentence !== currentSentence && newSentence >= 0 && newSentence < sentences.length) {
       console.log('Manual scroll detected - moving to paragraph:', newSentence);
       setManualScroll(true);
       setCurrentSentence(newSentence);
       onProgress(newSentence);
       onSeek(newSentence);
-
-      // Don't auto-resume - stay in manual mode until user explicitly changes back
-      // The user can tap to play/pause to resume auto-sync
     }
   };
 
@@ -146,9 +147,10 @@ export function ReelReader({
         pagingEnabled={false}
         showsVerticalScrollIndicator={true}
         onScroll={handleScroll}
-        scrollEventThrottle={16}
+        scrollEventThrottle={100}
         decelerationRate="normal"
-        bounces={false}
+        bounces={true}
+        nestedScrollEnabled
       >
         {sentences.map((sentence, index) => {
           const isCurrent = index === currentSentence;
@@ -159,7 +161,7 @@ export function ReelReader({
               style={[
                 styles.sentenceItem,
                 {
-                  minHeight: windowHeight / VISIBLE_SENTENCES,
+                  minHeight: Math.max(windowHeight / VISIBLE_SENTENCES, 100),
                   backgroundColor: isCurrent ? colors.bg : colors.bg,
                   paddingVertical: 24,
                   marginVertical: 4,
@@ -170,6 +172,7 @@ export function ReelReader({
               <Pressable
                 style={styles.sentencePressable}
                 onPress={() => {
+                  console.log('Pressed paragraph:', index);
                   if (index === currentSentence) {
                     onPlayPause();
                   } else {
@@ -234,6 +237,15 @@ export function ReelReader({
           >
             <Text style={[styles.controlBtnText, { color: colors.fg }]}>↓</Text>
           </Pressable>
+
+          {onQuickSettings && (
+            <Pressable
+              style={[styles.controlBtn, styles.quickSettingsBtn, { borderColor: colors.accent }]}
+              onPress={onQuickSettings}
+            >
+              <Text style={[styles.quickSettingsText, { color: colors.accent }]}>⚡</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </View>
@@ -322,6 +334,15 @@ function makeStyles(colors: Palette, fontSize: number) {
     },
     playBtnText: {
       fontSize: 18,
+      fontWeight: '600',
+    },
+    quickSettingsBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+    },
+    quickSettingsText: {
+      fontSize: 20,
       fontWeight: '600',
     },
   });

@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
+import { Alert } from 'react-native';
 
 import { ReelReader } from '@/components/ReelReader';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -218,6 +219,24 @@ export default function ReelScreen() {
     if (bookId) saveSpeed(bookId, SPEEDS[next]);
   };
 
+  const handleQuickSettings = () => {
+    // Set optimal parameters automatically
+    setFontSize(22); // Optimal readable size
+    const optimalSpeedIdx = SPEEDS.indexOf(1.0); // Normal speed
+    if (optimalSpeedIdx >= 0) {
+      setSpeedIdx(optimalSpeedIdx);
+      player.setPlaybackRate(1.0);
+      if (bookId) saveSpeed(bookId, 1.0);
+    }
+
+    // Show confirmation
+    Alert.alert(
+      'Quick Settings Applied',
+      '✅ Optimal reading parameters configured:\n\n• Font Size: 22px\n• Reading Speed: 1.0×\n• Display: Comfortable\n\nYour reading experience is now optimized!',
+      [{ text: 'OK', style: 'default' }]
+    );
+  };
+
   const goHome = () => {
     try { player.pause(); } catch {}
     if (bookId) {
@@ -287,6 +306,7 @@ export default function ReelScreen() {
         currentTime={t}
         onPlayPause={() => { playing ? player.pause() : player.play(); }}
         onSeek={handleSeek}
+        onQuickSettings={handleQuickSettings}
       />
     </SafeAreaView>
   );
