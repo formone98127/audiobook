@@ -1,0 +1,89 @@
+{
+  "id": "alice",
+  "title": "Alice's Adventures in Wonderland",
+  "language": "en",
+  "text": {
+    "url": "text.json",
+    "bytes": 0
+  },
+  "chapters": [
+    {
+      "index": 0,
+      "title": "I. Down the Rabbit-Hole",
+      "duration": 683.74,
+      "audio": {
+        "url": "audio/ch000.mp3",
+        "bytes": 4103071
+      },
+      "timings": {
+        "url": "timings/ch000.json",
+        "bytes": 72103
+      }
+    },
+    {
+      "index": 1,
+      "title": "II. The Pool of Tears",
+      "duration": 665.4,
+      "audio": {
+        "url": "audio/ch001.mp3",
+        "bytes": 3993043
+      },
+      "timings": {
+        "url": "timings/ch001.json",
+        "bytes": 70964
+      }
+    },
+    {
+      "index": 2,
+      "title": "III. A Caucus-Race and a Long Tale",
+      "duration": 568.15,
+      "audio": {
+        "url": "audio/ch002.mp3",
+        "bytes": 3409520
+      },
+      "timings": {
+        "url": "timings/ch002.json",
+        "bytes": 57789
+      }
+    },
+    {
+      "index": 3,
+      "title": "IV. The Rabbit Sends in a Little Bill",
+      "duration": 838.1,
+      "audio": {
+        "url": "audio/ch003.mp3",
+        "bytes": 5029216
+      },
+      "timings": {
+        "url": "timings/ch003.json",
+        "bytes": 89348
+      }
+    },
+    {
+      "index": 4,
+      "title": "V. Advice from a Caterpillar",
+      "duration": 722.66,
+      "audio": {
+        "url": "audio/ch004.mp3",
+        "bytes": 4336606
+      },
+      "timings": {
+        "url": "timings/ch004.json",
+        "bytes": 74620
+      }
+    },
+    {
+      "index": 5,
+      "title": "VI. Pig and Pepper",
+      "duration": 840.89,
+      "audio": {
+        "url": "audio/ch005.mp3",
+        "bytes": 5045987
+      },
+      "timings": {
+        "url": "timings/ch005.json",
+        "bytes": 89125
+      }
+    }
+  ]
+}
