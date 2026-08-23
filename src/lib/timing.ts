@@ -133,4 +133,21 @@ export class TimingIndex {
     if (flat < 0 || flat >= this.flatStarts.length) return null;
     return this.flatStarts[flat] ?? null;
   }
+
+  /** Start time of the sentence, or null. */
+  timeAtSentence(sentenceIndex: number): number | null {
+    const arr = this.wordsBySentence.get(sentenceIndex);
+    if (arr && arr.length > 0) {
+      // Find first word with timing
+      for (let i = 0; i < arr.length; i++) {
+        if (arr[i]) return arr[i].start;
+      }
+    }
+    // Fallback to sentence timing table
+    const rank = this.sentIndexByRank.indexOf(sentenceIndex);
+    if (rank >= 0 && rank < this.sentStart.length) {
+      return this.sentStart[rank];
+    }
+    return null;
+  }
 }

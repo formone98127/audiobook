@@ -9,6 +9,7 @@ const KEY_THEME = '@theme';
 const KEY_RSVP = '@rsvpSettings';
 const KEY_RSVP_POS = '@rsvpPosition';
 const KEY_READER_MODE = '@readerMode';
+const KEY_REEL_POS = '@reelPosition';
 
 export type SavedPosition = { chapterIdx: number; currentTime: number };
 
@@ -26,7 +27,9 @@ export type RsvpSettings = {
 
 export type SavedRsvpPosition = { chapterIdx: number; wordIndex: number };
 
-export type ReaderMode = 'audio' | 'rsvp';
+export type SavedReelPosition = { chapterIdx: number; sentenceIndex: number };
+
+export type ReaderMode = 'audio' | 'rsvp' | 'reel';
 
 export const DEFAULT_RSVP_SETTINGS: RsvpSettings = {
   wpm: 300,
@@ -128,11 +131,22 @@ export async function loadRsvpPosition(bookId: string): Promise<SavedRsvpPositio
   return raw ? (JSON.parse(raw) as SavedRsvpPosition) : null;
 }
 
+export async function saveReelPosition(bookId: string, pos: SavedReelPosition): Promise<void> {
+  await AsyncStorage.setItem(`${KEY_REEL_POS}:${bookId}`, JSON.stringify(pos));
+}
+
+export async function loadReelPosition(bookId: string): Promise<SavedReelPosition | null> {
+  const raw = await AsyncStorage.getItem(`${KEY_REEL_POS}:${bookId}`);
+  return raw ? (JSON.parse(raw) as SavedReelPosition) : null;
+}
+
 export async function saveReaderMode(mode: ReaderMode): Promise<void> {
   await AsyncStorage.setItem(KEY_READER_MODE, mode);
 }
 
 export async function loadReaderMode(): Promise<ReaderMode> {
   const raw = await AsyncStorage.getItem(KEY_READER_MODE);
-  return raw === 'audio' ? 'audio' : 'rsvp';
+  if (raw === 'audio') return 'audio';
+  if (raw === 'reel') return 'reel';
+  return 'rsvp';
 }

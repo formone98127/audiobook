@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RsvpView } from '@/components/RsvpView';
+import { ReelReader } from '@/components/ReelReader';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Fonts } from '@/constants/lumina';
 import { audioUrlFor, loadBook, loadTimings } from '@/lib/api';
@@ -27,13 +28,16 @@ import {
   loadRsvpPosition,
   loadRsvpSettings,
   loadSpeed,
+  loadReelPosition,
   savePosition,
   saveReaderMode,
   saveRsvpPosition,
   saveRsvpSettings,
   saveSpeed,
+  saveReelPosition,
   type ReaderMode,
   type RsvpSettings,
+  type SavedReelPosition,
 } from '@/lib/storage';
 import { TimingIndex } from '@/lib/timing';
 import type { BookChapter, BookText, Manifest } from '@/lib/types';
@@ -76,6 +80,8 @@ export default function ReaderScreen() {
   const [syncAvailable, setSyncAvailable] = useState(false);
   const [syncIndex, setSyncIndex] = useState(0);
   const syncIndexRef = useRef(0);
+  const [reelSentenceIndex, setReelSentenceIndex] = useState(0);
+  const [reelReady, setReelReady] = useState(false);
 
   const player = useAudioPlayer(null, { updateInterval: 25 });
 
@@ -91,7 +97,7 @@ export default function ReaderScreen() {
 
   const [, setTick] = useState(0);
   useEffect(() => {
-    const needTick = mode === 'audio' || (mode === 'rsvp' && syncAvailable);
+    const needTick = mode === 'audio' || mode === 'reel' || (mode === 'rsvp' && syncAvailable);
     if (!needTick) return;
     const id = setInterval(() => setTick((v) => v + 1), 25);
     return () => clearInterval(id);
@@ -213,6 +219,18 @@ export default function ReaderScreen() {
         return;
       }
 
+      if (mode === 'reel') {
+        if (bookId && initialChapter === 0) {
+          const saved = await loadReelPosition(bookId);
+          if (saved) {
+            await openChapterReel(saved.chapterIdx, saved.sentenceIndex);
+            return;
+          }
+        }
+        await openChapterReel(initialChapter, 0);
+        return;
+      }
+
       if (bookId && initialChapter === 0) {
         const saved = await loadPosition(bookId);
         if (saved) {
@@ -283,6 +301,16 @@ export default function ReaderScreen() {
       rows.push(p.sentences.map((s) => s.text));
     }
     return rows;
+  }, [chapter]);
+
+  const sentences = useMemo(() => {
+    const sents: string[] = [];
+    for (const p of chapter?.paragraphs ?? []) {
+      for (const s of p.sentences) {
+        sents.push(s.text);
+      }
+    }
+    return sents;
   }, [chapter]);
 
   const tokens = useMemo(() => {
@@ -370,6 +398,72 @@ export default function ReaderScreen() {
     if (seek != null) player.seekTo(seek);
   }, [timings, rsvpSettings?.chunkSize, flashIndex, player]);
 
+  const openChapterReel = useCallback(
+    async (i: number, sentenceIndex = 0): Promise<boolean> => {
+      if (!book) return false;
+      setLoadingChapter(true);
+      setError(null);
+      try {
+        setChapterIdx(i);
+        setReelSentenceIndex(sentenceIndex);
+        // Try to load audio and timings for reel mode
+        try {
+          const tj = await loadTimings(manifestUrl, i, book.manifest);
+          setTimings(new TimingIndex(tj));
+          const uri = audioUrlFor(manifestUrl, i, book.manifest);
+          player.replace({ uri });
+          player.setPlaybackRate(speedRef.current);
+          setReelReady(true);
+          setAudioReady(true);
+          setTimeout(() => {
+            try { player.play(); } catch {}
+            setBuffering(false);
+          }, 600);
+          return true;
+        } catch {
+          try { player.pause(); } catch {}
+          setReelReady(false);
+          setAudioReady(false);
+          setTimings(null);
+          return false;
+        }
+      } finally {
+        setLoadingChapter(false);
+      }
+    },
+    [book, player, manifestUrl],
+  );
+
+  const onReelProgress = useCallback(
+    (sentenceIndex: number) => {
+      setReelSentenceIndex(sentenceIndex);
+      if (!bookId) return;
+      const now = Date.now();
+      if (now - lastSaveRef.current < 2000) return;
+      lastSaveRef.current = now;
+      saveReelPosition(bookId, { chapterIdx, sentenceIndex });
+      savePosition(bookId, { chapterIdx, currentTime: player.currentTime });
+    },
+    [bookId, chapterIdx, player],
+  );
+
+  const onReelSeek = useCallback((sentenceIndex: number) => {
+    if (!timings) return;
+    const seek = timings.timeAtSentence(sentenceIndex);
+    if (seek != null) {
+      player.seekTo(seek);
+    }
+  }, [timings, player]);
+
+  const onReelChapterComplete = useCallback(() => {
+    if (!book) return;
+    if (chapterIdx < book.manifest.chapters.length - 1) {
+      const next = chapterIdx + 1;
+      openChapterReel(next, 0);
+      if (bookId) saveReelPosition(bookId, { chapterIdx: next, sentenceIndex: 0 });
+    }
+  }, [book, chapterIdx, openChapterReel, bookId]);
+
   const switchMode = async (next: ReaderMode) => {
     if (next === mode) return;
     setMode(next);
@@ -377,6 +471,11 @@ export default function ReaderScreen() {
 
     if (next === 'rsvp') {
       await openChapterRsvp(chapterIdx, rsvpWordIndex);
+      return;
+    }
+
+    if (next === 'reel') {
+      await openChapterReel(chapterIdx, reelSentenceIndex);
       return;
     }
 
@@ -425,8 +524,10 @@ export default function ReaderScreen() {
     if (bookId) {
       if (mode === 'audio') {
         savePosition(bookId, { chapterIdx, currentTime: t });
-      } else {
+      } else if (mode === 'rsvp') {
         saveRsvpPosition(bookId, { chapterIdx, wordIndex: rsvpWordIndex });
+      } else if (mode === 'reel') {
+        saveReelPosition(bookId, { chapterIdx, sentenceIndex: reelSentenceIndex });
       }
     }
     router.replace('/bookshelf');
@@ -437,6 +538,9 @@ export default function ReaderScreen() {
     if (mode === 'rsvp') {
       openChapterRsvp(i, 0);
       if (bookId) saveRsvpPosition(bookId, { chapterIdx: i, wordIndex: 0 });
+    } else if (mode === 'reel') {
+      openChapterReel(i, 0);
+      if (bookId) saveReelPosition(bookId, { chapterIdx: i, sentenceIndex: 0 });
     } else {
       openChapterAudio(i, playing);
     }
@@ -476,9 +580,14 @@ export default function ReaderScreen() {
         </Pressable>
         <View style={styles.topbarRight}>
           <ThemeToggle compact />
-          <Pressable onPress={() => switchMode(mode === 'rsvp' ? 'audio' : 'rsvp')} hitSlop={8}>
+          <Pressable onPress={() => {
+            const modes: ReaderMode[] = ['audio', 'rsvp', 'reel'];
+            const currentIdx = modes.indexOf(mode);
+            const next = modes[(currentIdx + 1) % modes.length];
+            switchMode(next);
+          }} hitSlop={8}>
             <Text style={[styles.editBtn, { color: colors.muted }]}>
-              {mode === 'rsvp' ? 'Audio' : 'RSVP'}
+              {mode === 'rsvp' ? 'RSVP' : mode === 'reel' ? 'Reel' : 'Audio'}
             </Text>
           </Pressable>
           <Pressable onPress={() => setPickerOpen(true)} hitSlop={8}>
@@ -517,6 +626,26 @@ export default function ReaderScreen() {
               onCycleSpeed: cycleSpeed,
               onStep: rsvpStep,
             }}
+          />
+        )
+      ) : mode === 'reel' ? (
+        loadingChapter ? (
+          <View style={styles.centerFlex}>
+            <ActivityIndicator color={colors.accent} />
+            <Text style={[styles.dim, { color: colors.muted }]}>Loading chapter...</Text>
+          </View>
+        ) : (
+          <ReelReader
+            sentences={sentences}
+            timings={timings}
+            onProgress={onReelProgress}
+            onChapterComplete={onReelChapterComplete}
+            fontSize={fontSize}
+            colors={colors}
+            playing={playing}
+            currentTime={t}
+            onPlayPause={() => { playing ? player.pause() : player.play(); }}
+            onSeek={onReelSeek}
           />
         )
       ) : (
