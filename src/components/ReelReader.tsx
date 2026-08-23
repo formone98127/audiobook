@@ -26,7 +26,7 @@ type Props = {
   onQuickSettings?: () => void;
 };
 
-const VISIBLE_SENTENCES = 3; // Show 3 paragraphs at once for better context
+const VISIBLE_SENTENCES = 4; // Show more paragraphs with tighter spacing
 
 export function ReelReader({
   sentences,
@@ -161,10 +161,10 @@ export function ReelReader({
               style={[
                 styles.sentenceItem,
                 {
-                  minHeight: Math.max(windowHeight / VISIBLE_SENTENCES, 100),
+                  minHeight: Math.max(windowHeight / VISIBLE_SENTENCES, 80),
                   backgroundColor: isCurrent ? colors.bg : colors.bg,
-                  paddingVertical: 24,
-                  marginVertical: 4,
+                  paddingVertical: 6,
+                  marginVertical: 1,
                   paddingHorizontal: 24,
                 }
               ]}
@@ -263,10 +263,9 @@ function makeStyles(colors: Palette, fontSize: number) {
     },
     sentenceItem: {
       justifyContent: 'center',
-      padding: 24,
-      marginHorizontal: 16,
-      marginVertical: 4,
-      borderRadius: 8,
+      paddingVertical: 4,
+      paddingHorizontal: 24,
+      marginVertical: 0,
     },
     sentencePressable: {
       width: '100%',

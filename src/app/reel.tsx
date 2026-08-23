@@ -220,8 +220,8 @@ export default function ReelScreen() {
   };
 
   const handleQuickSettings = () => {
-    // Set optimal parameters automatically
-    setFontSize(22); // Optimal readable size
+    // Set optimal parameters automatically for compact reading
+    setFontSize(18); // Smaller size for compact display
     const optimalSpeedIdx = SPEEDS.indexOf(1.0); // Normal speed
     if (optimalSpeedIdx >= 0) {
       setSpeedIdx(optimalSpeedIdx);
@@ -232,7 +232,7 @@ export default function ReelScreen() {
     // Show confirmation
     Alert.alert(
       'Quick Settings Applied',
-      '✅ Optimal reading parameters configured:\n\n• Font Size: 22px\n• Reading Speed: 1.0×\n• Display: Comfortable\n\nYour reading experience is now optimized!',
+      '✅ Optimal reading parameters configured:\n\n• Font Size: 18px (compact)\n• Reading Speed: 1.0×\n• Display: One-line spacing\n• Paragraphs: Compact layout\n\nYour reading experience is now optimized!',
       [{ text: 'OK', style: 'default' }]
     );
   };
