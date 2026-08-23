@@ -95,9 +95,6 @@ export function ReelReader({
     const paragraphHeight = fontSize * 2.4;
     const newParagraph = Math.round(offsetY / paragraphHeight);
 
-    // User is manually scrolling - enable manual mode
-    setManualScroll(true);
-
     // Update current paragraph based on scroll position
     if (newParagraph !== currentSentence && newParagraph >= 0 && newParagraph < sentences.length) {
       console.log('Scroll to paragraph:', newParagraph);
@@ -161,12 +158,6 @@ export function ReelReader({
         pagingEnabled={false}
         showsVerticalScrollIndicator={true}
         onScroll={handleScroll}
-        onScrollBeginDrag={() => {
-          console.log('Scroll began - enabling manual scroll mode');
-          setManualScroll(true); // Enable manual scroll mode to prevent auto-scroll interference
-        }}
-        onScrollEndDrag={handleScrollEnd}
-        onMomentumScrollEnd={handleMomentumScrollEnd}
         scrollEventThrottle={16}
         decelerationRate="fast"
         bounces={true}
