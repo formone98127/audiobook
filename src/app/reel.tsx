@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { ReelReader } from '@/components/ReelReader';
@@ -13,7 +13,6 @@ import {
   savePosition,
   saveReelPosition,
   saveSpeed,
-  type SavedReelPosition,
 } from '@/lib/storage';
 import { TimingIndex } from '@/lib/timing';
 import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
@@ -55,7 +54,8 @@ export default function ReelScreen() {
   const [sentenceIndex, setSentenceIndex] = useState(0);
   const [audioReady, setAudioReady] = useState(false);
 
-  const player = useAudioPlayer(null, { updateInterval: 25 });
+  const player = useAudioPlayer(null, { updateInterval: 50 }); // Slower updates = less flicker
+  const lastSyncedParaRef = useRef<number>(-1); // Track last synced paragraph to avoid loops
 
   useEffect(() => {
     setAudioModeAsync({
@@ -90,11 +90,15 @@ export default function ReelScreen() {
 
         setChapterIdx(startChapter);
         setSentenceIndex(startSentence);
+        lastSyncedParaRef.current = startSentence;
 
         // Load audio and timings
         try {
           const tj = await loadTimings(manifestUrl, startChapter, bookData.manifest);
-          setTimings(new TimingIndex(tj));
+          console.log('=== TIMINGS LOADED ===', JSON.stringify(tj).substring(0, 500));
+          const timingIndex = new TimingIndex(tj);
+          console.log('=== TimingIndex created === sentenceCount:', timingIndex.sentenceCount, 'totalWords:', timingIndex.totalWords);
+          setTimings(timingIndex);
           const uri = audioUrlFor(manifestUrl, startChapter, bookData.manifest);
           player.replace({ uri });
           setAudioReady(true);
@@ -115,19 +119,6 @@ export default function ReelScreen() {
             }
           }
         });
-
-        // Load speed preference
-        if (bookId) {
-          loadSpeed(bookId).then((s) => {
-            if (s != null) {
-              const idx = SPEEDS.indexOf(s);
-              if (idx >= 0) {
-                setSpeedIdx(idx);
-                player.setPlaybackRate(SPEEDS[idx]);
-              }
-            }
-          });
-        }
       })
       .catch((e) => setError(String(e?.message ?? e)))
       .finally(() => setLoading(false));
@@ -149,26 +140,40 @@ export default function ReelScreen() {
     return paras;
   }, [chapter]);
 
-  // Auto-scroll effect for audio sync - paragraph-based with logging
+  // Build sentence-to-paragraph index mapping - stable reference
+  const sentenceToParaIndex = useMemo(() => {
+    if (!chapter) return new Map<number, number>();
+    const map = new Map<number, number>();
+    let sentenceIdx = 0;
+    chapter.paragraphs.forEach((para, paraIdx) => {
+      para.sentences.forEach(() => {
+        map.set(sentenceIdx++, paraIdx);
+      });
+    });
+    return map;
+  }, [chapter]);
+
+  // Audio sync effect - simplified to avoid circular dependencies
   useEffect(() => {
     if (!timings || !playing || paragraphs.length === 0) return;
 
     const targetSentenceIndex = timings.sentenceAt(t);
-    if (targetSentenceIndex >= 0) {
-      // Convert sentence index to paragraph index (approx 3 sentences per paragraph)
-      const targetParaIndex = Math.floor(targetSentenceIndex / 3);
+    console.log('>>> SYNC DEBUG: t=', t.toFixed(2), 'sentenceCount=', timings.sentenceCount, 'targetSentenceIndex=', targetSentenceIndex);
 
-      console.log('Audio sync - current t:', t.toFixed(2), 'targetSentenceIndex:', targetSentenceIndex, 'targetParaIndex:', targetParaIndex, 'current sentenceIndex:', sentenceIndex, 'paragraphs.length:', paragraphs.length);
+    if (targetSentenceIndex < 0) return;
 
-      if (targetParaIndex !== sentenceIndex) {
-        console.log('Updating sentenceIndex from', sentenceIndex, 'to', targetParaIndex);
-        setSentenceIndex(targetParaIndex);
-        if (bookId) {
-          saveReelPosition(bookId, { chapterIdx, sentenceIndex: targetParaIndex });
-        }
+    const targetParaIndex = sentenceToParaIndex.get(targetSentenceIndex) ?? 0;
+
+    // Only update if different from last synced AND different from current
+    if (targetParaIndex !== lastSyncedParaRef.current && targetParaIndex !== sentenceIndex) {
+      console.log('Audio sync: t=', t.toFixed(2), 'sentenceIdx=', targetSentenceIndex, '-> paraIdx=', targetParaIndex);
+      lastSyncedParaRef.current = targetParaIndex;
+      setSentenceIndex(targetParaIndex);
+      if (bookId) {
+        saveReelPosition(bookId, { chapterIdx, sentenceIndex: targetParaIndex });
       }
     }
-  }, [t, timings, playing, paragraphs.length, chapterIdx, bookId]);
+  }, [t, timings, playing, paragraphs.length, sentenceToParaIndex, chapterIdx, bookId]);
 
   // Auto-save position
   useEffect(() => {
@@ -180,23 +185,34 @@ export default function ReelScreen() {
     return () => clearInterval(interval);
   }, [bookId, chapterIdx, sentenceIndex, playing, audioReady, player]);
 
-  const handleProgress = (idx: number) => {
+  const handleProgress = useCallback((idx: number) => {
     setSentenceIndex(idx);
+    lastSyncedParaRef.current = idx; // Mark as user-initiated
     if (bookId) {
       saveReelPosition(bookId, { chapterIdx, sentenceIndex: idx });
     }
-  };
+  }, [bookId, chapterIdx]);
 
-  const handleSeek = (idx: number) => {
-    if (!timings) return;
+  const handleSeek = useCallback((idx: number) => {
+    if (!timings || !chapter) return;
     console.log('Seeking audio to paragraph:', idx);
-    // Find which sentence corresponds to this paragraph and seek there
-    const currentParaSentenceStart = idx * 3; // Approximate: 3 sentences per paragraph
-    const seek = timings.timeAtFlatWord(currentParaSentenceStart);
+
+    // Find the first sentence in the target paragraph
+    let targetSentenceIdx = 0;
+    let sentenceCount = 0;
+    for (let i = 0; i < chapter.paragraphs.length; i++) {
+      if (i === idx) {
+        targetSentenceIdx = sentenceCount;
+        break;
+      }
+      sentenceCount += chapter.paragraphs[i].sentences.length;
+    }
+
+    const seek = timings.timeAtFlatWord(targetSentenceIdx);
     if (seek != null) {
-      console.log('Seeking audio to time:', seek, 'for paragraph', idx);
+      console.log('Seeking audio to time:', seek, 'for paragraph', idx, '(sentence', targetSentenceIdx, ')');
       player.seekTo(seek);
-      // Auto-resume audio sync after user scrolls
+      lastSyncedParaRef.current = idx; // Mark as user-initiated
       setTimeout(() => {
         if (playing) {
           player.play();
@@ -205,9 +221,9 @@ export default function ReelScreen() {
     } else {
       console.log('Could not find seek time for paragraph:', idx);
     }
-  };
+  }, [timings, chapter, playing]);
 
-  const handleChapterComplete = () => {
+  const handleChapterComplete = useCallback(() => {
     if (!book || !bookId || chapterIdx >= book.manifest.chapters.length - 1) return;
     const next = chapterIdx + 1;
     loadTimings(manifestUrlFor(bookId), next, book.manifest)
@@ -215,45 +231,44 @@ export default function ReelScreen() {
         setTimings(new TimingIndex(tj));
         setChapterIdx(next);
         setSentenceIndex(0);
+        lastSyncedParaRef.current = 0;
         const uri = audioUrlFor(manifestUrlFor(bookId), next, book.manifest);
         player.replace({ uri });
         saveReelPosition(bookId, { chapterIdx: next, sentenceIndex: 0 });
       })
       .catch(() => {});
-  };
+  }, [book, bookId, chapterIdx, player]);
 
-  const cycleSpeed = () => {
+  const cycleSpeed = useCallback(() => {
     const next = (speedIdx + 1) % SPEEDS.length;
     setSpeedIdx(next);
     player.setPlaybackRate(SPEEDS[next]);
     if (bookId) saveSpeed(bookId, SPEEDS[next]);
-  };
+  }, [bookId, speedIdx, player]);
 
-  const handleQuickSettings = () => {
-    // Set optimal parameters automatically for compact reading
-    setFontSize(18); // Smaller size for compact display
-    const optimalSpeedIdx = SPEEDS.indexOf(1.0); // Normal speed
+  const handleQuickSettings = useCallback(() => {
+    setFontSize(18);
+    const optimalSpeedIdx = SPEEDS.indexOf(1.0);
     if (optimalSpeedIdx >= 0) {
       setSpeedIdx(optimalSpeedIdx);
       player.setPlaybackRate(1.0);
       if (bookId) saveSpeed(bookId, 1.0);
     }
 
-    // Show confirmation
     Alert.alert(
       'Quick Settings Applied',
       '✅ Optimal reading parameters configured:\n\n• Font Size: 18px (compact)\n• Reading Speed: 1.0×\n• Display: One-line spacing\n• Paragraphs: Compact layout\n\nYour reading experience is now optimized!',
       [{ text: 'OK', style: 'default' }]
     );
-  };
+  }, [bookId, player]);
 
-  const goHome = () => {
+  const goHome = useCallback(() => {
     try { player.pause(); } catch {}
     if (bookId) {
       saveReelPosition(bookId, { chapterIdx, sentenceIndex });
     }
     router.replace('/bookshelf');
-  };
+  }, [bookId, chapterIdx, sentenceIndex, player, router]);
 
   if (error) {
     return (
@@ -307,13 +322,11 @@ export default function ReelScreen() {
       {/* ReelReader Component */}
       <ReelReader
         sentences={paragraphs}
-        timings={timings}
         onProgress={handleProgress}
         onChapterComplete={handleChapterComplete}
         fontSize={fontSize}
         colors={colors}
         playing={playing}
-        currentTime={t}
         onPlayPause={() => { playing ? player.pause() : player.play(); }}
         onSeek={handleSeek}
         onQuickSettings={handleQuickSettings}

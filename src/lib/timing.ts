@@ -11,6 +11,8 @@ export class TimingIndex {
   readonly tokens: string[] | null = null;
 
   constructor(json: TimingsJson) {
+    console.log('=== TimingIndex constructor === words:', json.words?.length, 'sentences:', json.sentences?.length);
+
     for (const [si, wi, start, end] of json.words) {
       let arr = this.wordsBySentence.get(si);
       if (!arr) {
@@ -46,6 +48,8 @@ export class TimingIndex {
 
   /** Original sentence index whose start <= t, or -1. */
   sentenceAt(t: number): number {
+    console.log('sentenceAt: t=', t, 'sentStart.length=', this.sentStart.length, 'sentStart[0]=', this.sentStart[0]);
+
     let lo = 0;
     let hi = this.sentStart.length - 1;
     let rank = -1;
@@ -59,7 +63,9 @@ export class TimingIndex {
       }
     }
     if (rank < 0) return -1;
-    return this.sentIndexByRank[rank] ?? -1;
+    const result = this.sentIndexByRank[rank] ?? -1;
+    console.log('sentenceAt: rank=', rank, 'result=', result);
+    return result;
   }
 
   sentenceStartOf(i: number): number {

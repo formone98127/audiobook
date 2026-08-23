@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,34 +9,27 @@ import {
 } from 'react-native';
 
 import { Fonts, type Palette } from '@/constants/lumina';
-import type { TimingIndex } from '@/lib/timing';
 
 type Props = {
   sentences: string[];
-  timings: TimingIndex | null;
   onProgress: (sentenceIndex: number) => void;
   onChapterComplete: () => void;
   fontSize: number;
   colors: Palette;
   playing: boolean;
-  currentTime: number;
   onPlayPause: () => void;
   onSeek: (sentenceIndex: number) => void;
   onQuickSettings?: () => void;
-  currentParagraph?: number; // Add controlled prop for current paragraph
+  currentParagraph?: number;
 };
-
-const VISIBLE_SENTENCES = 5; // Show 5 paragraphs for context, snap between them
 
 export function ReelReader({
   sentences,
-  timings,
   onProgress,
   onChapterComplete,
   fontSize,
   colors,
   playing,
-  currentTime,
   onPlayPause,
   onSeek,
   onQuickSettings,
@@ -48,72 +40,53 @@ export function ReelReader({
 
   const [currentSentence, setCurrentSentence] = useState(currentParagraph);
   const scrollViewRef = useRef<ScrollView>(null);
-  const currentIndexRef = useRef(0);
+  const manualScrollRef = useRef<boolean>(false); // Track if scroll was user-initiated
+  const paragraphHeight = fontSize * 2.4; // Text + margin height
 
-  // Update local state when prop changes (controlled component)
-  useEffect(() => {
-    if (currentParagraph !== currentSentence) {
-      console.log('ReelReader: Updating from prop', currentSentence, '->', currentParagraph);
-      setCurrentSentence(currentParagraph);
-      scrollToParagraph(currentParagraph, true);
+  // Scroll to paragraph function - stable reference
+  const scrollToParagraph = useCallback((index: number, animated = true) => {
+    if (scrollViewRef.current && index >= 0 && index < sentences.length) {
+      const targetY = index * paragraphHeight;
+      console.log('Scrolling to paragraph', index, 'at Y:', targetY);
+      scrollViewRef.current.scrollTo({ y: targetY, animated });
     }
-  }, [currentParagraph]);
+  }, [paragraphHeight, sentences.length]);
 
-  // Auto-scroll when currentSentence prop changes (controlled by parent)
-  useEffect(() => {
-    console.log('ReelReader currentSentence changed to:', currentSentence, 'from parent');
-    scrollToParagraph(currentSentence, true);
-  }, []); // Only run on mount to avoid conflicts
-
-  const handleScroll = (event: any) => {
+  // Handle scroll events - only when user manually scrolls
+  const handleScroll = useCallback((event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
-    const paragraphHeight = fontSize * 2.4;
     const newParagraph = Math.round(offsetY / paragraphHeight);
 
-    // Update current paragraph based on scroll position
     if (newParagraph !== currentSentence && newParagraph >= 0 && newParagraph < sentences.length) {
-      console.log('Scroll to paragraph:', newParagraph);
+      console.log('Manual scroll to paragraph:', newParagraph);
+      manualScrollRef.current = true; // Mark as user-initiated
       setCurrentSentence(newParagraph);
       onProgress(newParagraph);
       onSeek(newParagraph);
     }
-  };
+  }, [currentSentence, paragraphHeight, sentences.length, onProgress, onSeek]);
 
-  const handleScrollEnd = () => {
-    console.log('Scroll ended - re-enabling auto-scroll');
-    setManualScroll(false);
-  };
-
-  const handleMomentumScrollEnd = () => {
-    console.log('Momentum scroll ended - ensuring auto-scroll is enabled');
-    setManualScroll(false);
-  };
-
-  const scrollToSentence = (index: number, animated = true) => {
-    if (scrollViewRef.current && index >= 0 && index < sentences.length) {
-      const sentenceHeight = windowHeight / VISIBLE_SENTENCES;
-      const targetY = (index * sentenceHeight) - (windowHeight / 2) + (sentenceHeight / 2);
-      const maxY = Math.max(0, (sentences.length * sentenceHeight) - windowHeight);
-      const finalY = Math.max(0, Math.min(targetY, maxY));
-      console.log('Scrolling to paragraph', index, 'at Y:', finalY);
-      scrollViewRef.current.scrollTo({ y: finalY, animated });
+  // Sync local state with prop changes (from parent audio sync)
+  useEffect(() => {
+    console.log('=== SYNC CHECK === currentParagraph:', currentParagraph, 'currentSentence:', currentSentence, 'manualScroll:', manualScrollRef.current);
+    if (currentParagraph !== currentSentence) {
+      if (!manualScrollRef.current) {
+        // Audio-driven sync - apply it
+        console.log('>>> Audio sync triggered: updating to paragraph', currentParagraph);
+        setCurrentSentence(currentParagraph);
+        setTimeout(() => scrollToParagraph(currentParagraph, true), 100);
+      } else {
+        // User manually scrolled - accept their position, already notified parent
+        console.log('>>> User manual scroll detected, skipping auto-sync to paragraph:', currentParagraph);
+        manualScrollRef.current = false; // Reset flag
+        setCurrentSentence(currentParagraph); // Align with parent without forcing scroll
+      }
     }
-  };
-
-  const scrollToParagraph = (index: number, animated = true) => {
-    if (scrollViewRef.current && index >= 0 && index < sentences.length) {
-      // Snap to exact paragraph position for Reels-style behavior
-      const paragraphHeight = fontSize * 2.4; // Text + margin height
-      const targetY = index * paragraphHeight;
-      const finalY = Math.max(0, targetY);
-      console.log('Snapping to paragraph', index, 'at Y:', finalY);
-      scrollViewRef.current.scrollTo({ y: finalY, animated });
-    }
-  };
+  }, [currentParagraph, currentSentence, scrollToParagraph]);
 
   const nextSentence = () => {
     if (currentSentence < sentences.length - 1) {
-      scrollToSentence(currentSentence + 1);
+      scrollToParagraph(currentSentence + 1);
     } else {
       onChapterComplete();
     }
@@ -121,7 +94,7 @@ export function ReelReader({
 
   const prevSentence = () => {
     if (currentSentence > 0) {
-      scrollToSentence(currentSentence - 1);
+      scrollToParagraph(currentSentence - 1);
     }
   };
 
@@ -133,7 +106,7 @@ export function ReelReader({
         pagingEnabled={false}
         showsVerticalScrollIndicator={true}
         onScroll={handleScroll}
-        scrollEventThrottle={16}
+        scrollEventThrottle={100} // Throttle to reduce calls
         decelerationRate="fast"
         bounces={true}
       >
