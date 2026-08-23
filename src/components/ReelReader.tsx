@@ -56,29 +56,36 @@ export function ReelReader({
     return result;
   }, [timings, currentTime, sentences.length]);
 
-  // Force update when audioSentenceIndex changes
+  // Force update when audioSentenceIndex changes - but respect manual scroll
   useEffect(() => {
-    if (audioSentenceIndex !== currentSentence) {
+    if (audioSentenceIndex !== currentSentence && !manualScroll) {
       console.log('Forcing currentSentence update from', currentSentence, 'to', audioSentenceIndex);
       setCurrentSentence(audioSentenceIndex);
       scrollToSentence(audioSentenceIndex, true);
+    } else if (manualScroll) {
+      console.log('Skipping forced update - manual mode active');
     }
-  }, [audioSentenceIndex]);
+  }, [audioSentenceIndex, manualScroll]);
 
   currentIndexRef.current = currentSentence;
 
-  // Enhanced audio sync - check more frequently and force scroll
+  // Enhanced audio sync - check more frequently but respect manual scroll
   useEffect(() => {
     if (!playing || !timings || sentences.length === 0) return;
 
     const checkInterval = setInterval(() => {
-      const targetSentence = audioSentenceIndex;
-      if (targetSentence !== currentSentence && !manualScroll) {
-        console.log('Auto-scrolling to paragraph:', targetSentence, 'from', currentSentence);
-        setCurrentSentence(targetSentence);
-        scrollToSentence(targetSentence, true); // Use smooth animation for auto-scroll
+      // Only auto-scroll if not in manual mode
+      if (!manualScroll) {
+        const targetSentence = audioSentenceIndex;
+        if (targetSentence !== currentSentence) {
+          console.log('Auto-scrolling to paragraph:', targetSentence, 'from', currentSentence);
+          setCurrentSentence(targetSentence);
+          scrollToSentence(targetSentence, true); // Use smooth animation for auto-scroll
+        }
+      } else {
+        console.log('Skipping auto-scroll - manual mode active');
       }
-    }, 50); // Check every 50ms for even smoother sync
+    }, 100); // Check every 100ms for smooth sync
 
     return () => clearInterval(checkInterval);
   }, [playing, timings, sentences.length, audioSentenceIndex, currentSentence, manualScroll]);
@@ -89,13 +96,14 @@ export function ReelReader({
     const newSentence = Math.round(offsetY / sentenceHeight);
 
     if (newSentence !== currentSentence && newSentence >= 0 && newSentence < sentences.length) {
+      console.log('Manual scroll detected - moving to paragraph:', newSentence);
       setManualScroll(true);
       setCurrentSentence(newSentence);
       onProgress(newSentence);
       onSeek(newSentence);
 
-      // Auto-resume audio sync after a shorter delay for better responsiveness
-      setTimeout(() => setManualScroll(false), 1000);
+      // Don't auto-resume - stay in manual mode until user explicitly changes back
+      // The user can tap to play/pause to resume auto-sync
     }
   };
 
