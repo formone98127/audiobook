@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { ReelReader } from '@/components/ReelReader';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -137,15 +137,19 @@ export default function ReelScreen() {
   const duration = player.duration || 0;
   const progress = duration > 0 ? t / duration : 0;
 
-  // Auto-scroll effect for audio sync
+  // Auto-scroll effect for audio sync - paragraph-based
   useEffect(() => {
     if (!timings || !playing) return;
 
-    const targetIndex = timings.sentenceAt(t);
-    if (targetIndex >= 0 && targetIndex !== sentenceIndex) {
-      setSentenceIndex(targetIndex);
-      if (bookId) {
-        saveReelPosition(bookId, { chapterIdx, sentenceIndex: targetIndex });
+    const targetSentenceIndex = timings.sentenceAt(t);
+    if (targetSentenceIndex >= 0) {
+      // Convert sentence index to paragraph index (approx 3 sentences per paragraph)
+      const targetParaIndex = Math.floor(targetSentenceIndex / 3);
+      if (targetParaIndex !== sentenceIndex) {
+        setSentenceIndex(targetParaIndex);
+        if (bookId) {
+          saveReelPosition(bookId, { chapterIdx, sentenceIndex: targetParaIndex });
+        }
       }
     }
   }, [t, timings, playing, sentenceIndex, chapterIdx, bookId]);
@@ -162,7 +166,14 @@ export default function ReelScreen() {
 
   const chapter: BookChapter | undefined = book?.text.chapters.find((c) => c.index === chapterIdx);
 
-  const sentences = chapter?.paragraphs.flatMap((p) => p.sentences.map((s) => s.text)) ?? [];
+  const paragraphs = useMemo(() => {
+    const paras: string[] = [];
+    for (const p of chapter?.paragraphs ?? []) {
+      const text = p.sentences.map(s => s.text).join(' ');
+      if (text) paras.push(text);
+    }
+    return paras;
+  }, [chapter]);
 
   const handleProgress = (idx: number) => {
     setSentenceIndex(idx);
@@ -173,7 +184,9 @@ export default function ReelScreen() {
 
   const handleSeek = (idx: number) => {
     if (!timings) return;
-    const seek = timings.timeAtSentence(idx);
+    // Find which sentence corresponds to this paragraph and seek there
+    const currentParaSentenceStart = idx * 3; // Approximate: 3 sentences per paragraph
+    const seek = timings.timeAtFlatWord(currentParaSentenceStart);
     if (seek != null) {
       player.seekTo(seek);
     }
@@ -260,7 +273,7 @@ export default function ReelScreen() {
 
       {/* ReelReader Component */}
       <ReelReader
-        sentences={sentences}
+        sentences={paragraphs}
         timings={timings}
         onProgress={handleProgress}
         onChapterComplete={handleChapterComplete}
