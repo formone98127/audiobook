@@ -83,17 +83,6 @@ export function ReelReader({
     }
   }, [currentTime, currentSentence, timings, sentences.length]);
 
-  // Get visible sentences around current one
-  const visibleSentences = useMemo(() => {
-    const start = Math.max(0, currentSentence - Math.floor(VISIBLE_SENTENCES / 2));
-    const end = Math.min(sentences.length, start + VISIBLE_SENTENCES);
-    return sentences.slice(start, end).map((sentence, i) => ({
-      sentence,
-      index: start + i,
-      isCurrent: start + i === currentSentence,
-    }));
-  }, [currentSentence, sentences]);
-
   const handleScroll = (event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
     const sentenceHeight = windowHeight / VISIBLE_SENTENCES;
@@ -134,62 +123,6 @@ export function ReelReader({
     }
   };
 
-  const renderSentence = (item: { sentence: string; index: number; isCurrent: boolean }) => {
-    const opacity = item.isCurrent ? 1 : 0.3;
-    const scale = item.isCurrent ? 1.1 : 0.9;
-    const fontWeight = item.isCurrent ? '700' : '400';
-
-    return (
-      <View
-        key={item.index}
-        style={[
-          styles.sentenceItem,
-          {
-            height: windowHeight / VISIBLE_SENTENCES,
-            opacity,
-          }
-        ]}
-      >
-        <Pressable
-          style={styles.sentencePressable}
-          onPress={() => {
-            if (item.index === currentSentence) {
-              onPlayPause();
-            } else {
-              scrollToSentence(item.index);
-            }
-          }}
-        >
-          <Text
-            style={[
-              styles.sentenceText,
-              {
-                fontSize: item.isCurrent ? fontSize * scale : fontSize * 0.9,
-                fontWeight: fontWeight as any,
-                transform: [{ scale: item.isCurrent ? 1.05 : 0.95 }],
-              }
-            ]}
-          >
-            {item.sentence}
-          </Text>
-          {item.isCurrent && (
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    backgroundColor: colors.accent,
-                    width: `${progressRef.current * 100}%`,
-                  },
-                ]}
-              />
-            </View>
-          )}
-        </Pressable>
-      </View>
-    );
-  };
-
   return (
     <View style={styles.container}>
       <ScrollView
@@ -204,8 +137,10 @@ export function ReelReader({
       >
         {sentences.map((sentence, index) => {
           const isCurrent = index === currentSentence;
-          const opacity = isCurrent ? 1 : 0.3;
-          const scale = isCurrent ? 1.1 : 0.9;
+          const opacity = isCurrent ? 1 : 0.2;
+          const scale = isCurrent ? 1.4 : 0.75;
+          const backgroundColor = isCurrent ? colors.accent + '20' : 'transparent';
+          const borderColor = isCurrent ? colors.accent : 'transparent';
 
           return (
             <View
@@ -215,6 +150,10 @@ export function ReelReader({
                 {
                   height: windowHeight / VISIBLE_SENTENCES,
                   opacity,
+                  backgroundColor,
+                  borderWidth: isCurrent ? 3 : 0,
+                  borderColor,
+                  borderRadius: isCurrent ? 8 : 0,
                 }
               ]}
             >
@@ -232,26 +171,36 @@ export function ReelReader({
                   style={[
                     styles.sentenceText,
                     {
-                      fontSize: isCurrent ? fontSize * 1.1 : fontSize * 0.9,
-                      fontWeight: isCurrent ? '700' : '400',
-                      transform: [{ scale: isCurrent ? 1.02 : 0.98 }],
+                      fontSize: isCurrent ? fontSize * scale : fontSize * 0.8,
+                      fontWeight: isCurrent ? '900' : '300',
+                      color: isCurrent ? colors.accent : colors.fg,
+                      lineHeight: isCurrent ? fontSize * 1.8 : fontSize * 1.4,
+                      letterSpacing: isCurrent ? 1.2 : 0.5,
+                      textShadowColor: isCurrent ? colors.accent : 'transparent',
+                      textShadowOffset: isCurrent ? { width: 0, height: 0 } : { width: 0, height: 0 },
+                      textShadowRadius: isCurrent ? 8 : 0,
                     }
                   ]}
                 >
                   {sentence}
                 </Text>
                 {isCurrent && (
-                  <View style={styles.progressBar}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        {
-                          backgroundColor: colors.accent,
-                          width: `${progressRef.current * 100}%`,
-                        },
-                      ]}
-                    />
-                  </View>
+                  <>
+                    <View style={styles.progressBar}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          {
+                            backgroundColor: colors.accent,
+                            width: `${progressRef.current * 100}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <View style={styles.glowEffect}>
+                      <View style={[styles.glow, { backgroundColor: colors.accent }]} />
+                    </View>
+                  </>
                 )}
               </Pressable>
             </View>
@@ -310,9 +259,9 @@ function makeStyles(colors: Palette, fontSize: number) {
     sentenceItem: {
       justifyContent: 'center',
       alignItems: 'center',
-      padding: 16,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
+      padding: 20,
+      marginHorizontal: 16,
+      marginVertical: 4,
     },
     sentencePressable: {
       width: '100%',
@@ -321,23 +270,37 @@ function makeStyles(colors: Palette, fontSize: number) {
     },
     sentenceText: {
       fontFamily: Fonts.display,
-      color: colors.fg,
       textAlign: 'center',
-      lineHeight: fontSize * 1.5,
       paddingHorizontal: 24,
     },
     progressBar: {
       position: 'absolute',
-      bottom: -8,
-      left: 32,
-      right: 32,
-      height: 2,
+      bottom: -12,
+      left: 20,
+      right: 20,
+      height: 4,
       backgroundColor: colors.border,
-      borderRadius: 1,
+      borderRadius: 2,
       overflow: 'hidden',
     },
     progressFill: {
       height: '100%',
+    },
+    glowEffect: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+      pointerEvents: 'none',
+    },
+    glow: {
+      width: '80%',
+      height: '80%',
+      borderRadius: 20,
+      opacity: 0.1,
     },
     controls: {
       position: 'absolute',
