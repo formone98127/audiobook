@@ -25,7 +25,7 @@ type Props = {
   onSeek: (sentenceIndex: number) => void;
 };
 
-const VISIBLE_SENTENCES = 5; // Show 5 sentences at once
+const VISIBLE_SENTENCES = 7; // Target visible sentences for better context
 
 export function ReelReader({
   sentences,
@@ -59,14 +59,32 @@ export function ReelReader({
 
   // Sync with audio when not manually scrolling
   useEffect(() => {
-    if (!manualScroll && timings && sentences.length > 0) {
+    if (!manualScroll && timings && sentences.length > 0 && audioSentenceIndex !== currentSentence) {
       const targetSentence = audioSentenceIndex;
-      if (targetSentence !== currentSentence) {
-        setCurrentSentence(targetSentence);
-        scrollToSentence(targetSentence, false);
+      setCurrentSentence(targetSentence);
+      scrollToSentence(targetSentence, true); // Use smooth animation for auto-scroll
+
+      // Clear manual scroll mode more quickly for better audio sync
+      if (manualScroll) {
+        setTimeout(() => setManualScroll(false), 500);
       }
     }
   }, [manualScroll, timings, sentences.length, audioSentenceIndex, currentSentence]);
+
+  // Enhanced audio sync - check more frequently
+  useEffect(() => {
+    if (!playing || !timings || sentences.length === 0) return;
+
+    const checkInterval = setInterval(() => {
+      const targetSentence = audioSentenceIndex;
+      if (targetSentence !== currentSentence && !manualScroll) {
+        setCurrentSentence(targetSentence);
+        scrollToSentence(targetSentence, false); // Quick snap for audio sync
+      }
+    }, 100); // Check every 100ms for smoother sync
+
+    return () => clearInterval(checkInterval);
+  }, [playing, timings, sentences.length, audioSentenceIndex, currentSentence, manualScroll]);
 
   // Update progress bar
   useEffect(() => {
@@ -94,16 +112,19 @@ export function ReelReader({
       onProgress(newSentence);
       onSeek(newSentence);
 
-      // Auto-resume audio sync after a delay
-      setTimeout(() => setManualScroll(false), 2000);
+      // Auto-resume audio sync after a shorter delay for better responsiveness
+      setTimeout(() => setManualScroll(false), 1000);
     }
   };
 
   const scrollToSentence = (index: number, animated = true) => {
     if (scrollViewRef.current && index >= 0 && index < sentences.length) {
       const sentenceHeight = windowHeight / VISIBLE_SENTENCES;
+      // Calculate the target scroll position to center the current sentence
+      const targetY = (index * sentenceHeight) - (windowHeight / 2) + (sentenceHeight / 2);
+
       scrollViewRef.current.scrollTo({
-        y: index * sentenceHeight,
+        y: Math.max(0, Math.min(targetY, (sentences.length * sentenceHeight) - windowHeight)),
         animated,
       });
     }
@@ -128,19 +149,20 @@ export function ReelReader({
       <ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
-        pagingEnabled
-        showsVerticalScrollIndicator={false}
+        pagingEnabled={false}
+        showsVerticalScrollIndicator={true}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        snapToInterval={windowHeight / VISIBLE_SENTENCES}
-        decelerationRate="fast"
+        decelerationRate="normal"
+        bounces={false}
       >
         {sentences.map((sentence, index) => {
           const isCurrent = index === currentSentence;
-          const opacity = isCurrent ? 1 : 0.2;
-          const scale = isCurrent ? 1.4 : 0.75;
-          const backgroundColor = isCurrent ? colors.accent + '20' : 'transparent';
+          const opacity = isCurrent ? 1 : 0.25;
+          const scale = isCurrent ? 1.5 : 0.8;
+          const backgroundColor = isCurrent ? colors.accent + '25' : 'transparent';
           const borderColor = isCurrent ? colors.accent : 'transparent';
+          const sentenceHeight = Math.max(windowHeight * 0.15, 80); // Minimum height for readability
 
           return (
             <View
@@ -148,12 +170,14 @@ export function ReelReader({
               style={[
                 styles.sentenceItem,
                 {
-                  height: windowHeight / VISIBLE_SENTENCES,
+                  minHeight: sentenceHeight,
                   opacity,
                   backgroundColor,
                   borderWidth: isCurrent ? 3 : 0,
                   borderColor,
-                  borderRadius: isCurrent ? 8 : 0,
+                  borderRadius: isCurrent ? 12 : 0,
+                  paddingVertical: isCurrent ? 24 : 16,
+                  marginVertical: isCurrent ? 8 : 4,
                 }
               ]}
             >
@@ -171,14 +195,15 @@ export function ReelReader({
                   style={[
                     styles.sentenceText,
                     {
-                      fontSize: isCurrent ? fontSize * scale : fontSize * 0.8,
-                      fontWeight: isCurrent ? '900' : '300',
+                      fontSize: isCurrent ? Math.min(fontSize * scale, 48) : Math.max(fontSize * 0.8, 14),
+                      fontWeight: isCurrent ? '900' : '400',
                       color: isCurrent ? colors.accent : colors.fg,
-                      lineHeight: isCurrent ? fontSize * 1.8 : fontSize * 1.4,
-                      letterSpacing: isCurrent ? 1.2 : 0.5,
+                      lineHeight: isCurrent ? fontSize * 2.0 : fontSize * 1.4,
+                      letterSpacing: isCurrent ? 1.5 : 0.3,
                       textShadowColor: isCurrent ? colors.accent : 'transparent',
-                      textShadowOffset: isCurrent ? { width: 0, height: 0 } : { width: 0, height: 0 },
-                      textShadowRadius: isCurrent ? 8 : 0,
+                      textShadowOffset: isCurrent ? { width: 0, height: 0 } : undefined,
+                      textShadowRadius: isCurrent ? 12 : 0,
+                      opacity: isCurrent ? 1 : 0.6,
                     }
                   ]}
                 >

@@ -134,6 +134,21 @@ export default function ReelScreen() {
 
   const t = player.currentTime;
   const playing = player.playing;
+  const duration = player.duration || 0;
+  const progress = duration > 0 ? t / duration : 0;
+
+  // Auto-scroll effect for audio sync
+  useEffect(() => {
+    if (!timings || !playing) return;
+
+    const targetIndex = timings.sentenceAt(t);
+    if (targetIndex >= 0 && targetIndex !== sentenceIndex) {
+      setSentenceIndex(targetIndex);
+      if (bookId) {
+        saveReelPosition(bookId, { chapterIdx, sentenceIndex: targetIndex });
+      }
+    }
+  }, [t, timings, playing, sentenceIndex, chapterIdx, bookId]);
 
   // Auto-save position
   useEffect(() => {
@@ -214,9 +229,6 @@ export default function ReelScreen() {
       </SafeAreaView>
     );
   }
-
-  const duration = player.duration || 0;
-  const progress = duration > 0 ? t / duration : 0;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]} edges={['top', 'bottom']}>
