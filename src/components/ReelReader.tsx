@@ -71,11 +71,9 @@ export function ReelReader({
 
   currentIndexRef.current = currentSentence;
 
-  // Enhanced audio sync - continuous page auto-scroll
+  // Enhanced audio sync - reduced frequency for better performance
   useEffect(() => {
     if (!playing || !timings || sentences.length === 0) return;
-
-    let lastScrollY = -1;
 
     const checkInterval = setInterval(() => {
       // Only auto-scroll if not in manual mode
@@ -84,12 +82,10 @@ export function ReelReader({
         if (targetParagraph !== currentSentence) {
           console.log('Auto-scrolling to paragraph:', targetParagraph);
           setCurrentSentence(targetParagraph);
-          scrollToParagraph(targetParagraph, true);
+          scrollToParagraph(targetParagraph, false); // Faster snap for auto-scroll
         }
-      } else {
-        console.log('Manual scroll active - skipping auto-scroll');
       }
-    }, 100); // Check every 100ms for smooth auto-scroll
+    }, 200); // Reduced from 100ms to 200ms for better performance
 
     return () => clearInterval(checkInterval);
   }, [playing, timings, sentences.length, audioSentenceIndex, currentSentence, manualScroll]);
@@ -97,36 +93,20 @@ export function ReelReader({
   const handleScroll = (event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
     const paragraphHeight = fontSize * 2.4;
-    const currentParagraph = Math.round(offsetY / paragraphHeight);
+    const newParagraph = Math.round(offsetY / paragraphHeight);
 
-    // Only trigger if we're at a different paragraph and not just tiny scrolling
-    if (currentParagraph !== currentSentence && currentParagraph >= 0 && currentParagraph < sentences.length) {
-      console.log('Scroll gesture detected - moving from paragraph', currentSentence, 'to', currentParagraph);
-
-      // Determine scroll direction for better UX
-      const direction = currentParagraph > currentSentence ? 'next' : 'prev';
-      const targetParagraph = currentSentence + (direction === 'next' ? 1 : -1);
-
-      // Ensure target is within bounds
-      if (targetParagraph >= 0 && targetParagraph < sentences.length) {
-        setManualScroll(false);
-        setCurrentSentence(targetParagraph);
-        onProgress(targetParagraph);
-        onSeek(targetParagraph);
-        scrollToParagraph(targetParagraph, true);
-      }
+    // Very simple update - no forced scrolling during user interaction
+    if (newParagraph !== currentSentence && newParagraph >= 0 && newParagraph < sentences.length) {
+      console.log('Scroll to paragraph:', newParagraph);
+      setCurrentSentence(newParagraph);
+      onProgress(newParagraph);
+      onSeek(newParagraph);
     }
   };
 
   const handleScrollEnd = () => {
-    // Snap to the exact paragraph position when scroll ends
-    console.log('Scroll ended - snapping to paragraph:', currentSentence);
-    scrollToParagraph(currentSentence, true);
-  };
-
-  // Handle scroll begin for gesture detection
-  const handleScrollBegin = () => {
-    console.log('Scroll gesture began');
+    console.log('Scroll ended - current paragraph:', currentSentence);
+    setManualScroll(false);
   };
 
   const scrollToSentence = (index: number, animated = true) => {
@@ -173,7 +153,10 @@ export function ReelReader({
         pagingEnabled={false}
         showsVerticalScrollIndicator={true}
         onScroll={handleScroll}
-        onScrollBeginDrag={handleScrollBegin}
+        onScrollBeginDrag={() => {
+          console.log('Scroll began');
+          setManualScroll(false); // Allow smooth scrolling
+        }}
         onScrollEndDrag={handleScrollEnd}
         scrollEventThrottle={16}
         decelerationRate="fast"
