@@ -24,6 +24,7 @@ type Props = {
   onPlayPause: () => void;
   onSeek: (sentenceIndex: number) => void;
   onQuickSettings?: () => void;
+  currentParagraph?: number; // Add controlled prop for current paragraph
 };
 
 const VISIBLE_SENTENCES = 5; // Show 5 paragraphs for context, snap between them
@@ -40,51 +41,29 @@ export function ReelReader({
   onPlayPause,
   onSeek,
   onQuickSettings,
+  currentParagraph = 0,
 }: Props) {
   const { height: windowHeight } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(colors, fontSize), [colors, fontSize]);
 
-  const [currentSentence, setCurrentSentence] = useState(0);
+  const [currentSentence, setCurrentSentence] = useState(currentParagraph);
   const scrollViewRef = useRef<ScrollView>(null);
   const currentIndexRef = useRef(0);
 
-  // Calculate which paragraph should be active based on audio timings
-  const audioParagraphIndex = useMemo(() => {
-    if (!timings || sentences.length === 0) return 0;
-    const sentenceIdx = timings.sentenceAt(currentTime);
-    // Convert sentence index to paragraph index (approx 3 sentences per paragraph)
-    const paragraphIdx = sentenceIdx >= 0 ? Math.floor(sentenceIdx / 3) : 0;
-    const result = Math.max(0, Math.min(sentences.length - 1, paragraphIdx));
-    console.log('audioParagraphIndex calculation - currentTime:', currentTime.toFixed(2), 'sentenceIdx:', sentenceIdx, 'paragraphIdx:', paragraphIdx, 'result:', result, 'sentences.length:', sentences.length);
-    return result;
-  }, [timings, currentTime, sentences.length]);
-
-  // Force update when audioParagraphIndex changes
+  // Update local state when prop changes (controlled component)
   useEffect(() => {
-    if (audioParagraphIndex !== currentSentence) {
-      console.log('Auto-scrolling to follow audio:', currentSentence, '->', audioParagraphIndex);
-      setCurrentSentence(audioParagraphIndex);
-      scrollToParagraph(audioParagraphIndex, true);
+    if (currentParagraph !== currentSentence) {
+      console.log('ReelReader: Updating from prop', currentSentence, '->', currentParagraph);
+      setCurrentSentence(currentParagraph);
+      scrollToParagraph(currentParagraph, true);
     }
-  }, [audioParagraphIndex]);
+  }, [currentParagraph]);
 
-  currentIndexRef.current = currentSentence;
-
-  // Enhanced audio sync - reduced frequency for better performance
+  // Auto-scroll when currentSentence prop changes (controlled by parent)
   useEffect(() => {
-    if (!playing || !timings || sentences.length === 0) return;
-
-    const checkInterval = setInterval(() => {
-      const targetParagraph = audioParagraphIndex;
-      if (targetParagraph !== currentSentence) {
-        console.log('Auto-scrolling to paragraph:', targetParagraph);
-        setCurrentSentence(targetParagraph);
-        scrollToParagraph(targetParagraph, false); // Faster snap for auto-scroll
-      }
-    }, 200); // Reduced from 100ms to 200ms for better performance
-
-    return () => clearInterval(checkInterval);
-  }, [playing, timings, sentences.length, audioParagraphIndex, currentSentence]);
+    console.log('ReelReader currentSentence changed to:', currentSentence, 'from parent');
+    scrollToParagraph(currentSentence, true);
+  }, []); // Only run on mount to avoid conflicts
 
   const handleScroll = (event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;

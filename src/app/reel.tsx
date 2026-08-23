@@ -317,6 +317,7 @@ export default function ReelScreen() {
         onPlayPause={() => { playing ? player.pause() : player.play(); }}
         onSeek={handleSeek}
         onQuickSettings={handleQuickSettings}
+        currentParagraph={sentenceIndex}
       />
     </SafeAreaView>
   );
