@@ -26,7 +26,7 @@ type Props = {
   onQuickSettings?: () => void;
 };
 
-const VISIBLE_SENTENCES = 4; // Show more paragraphs with tighter spacing
+const VISIBLE_SENTENCES = 5; // Target visible paragraphs for continuous scrolling
 
 export function ReelReader({
   sentences,
@@ -71,23 +71,25 @@ export function ReelReader({
 
   currentIndexRef.current = currentSentence;
 
-  // Enhanced audio sync - check more frequently but respect manual scroll
+  // Enhanced audio sync - continuous page auto-scroll
   useEffect(() => {
     if (!playing || !timings || sentences.length === 0) return;
+
+    let lastScrollY = -1;
 
     const checkInterval = setInterval(() => {
       // Only auto-scroll if not in manual mode
       if (!manualScroll) {
-        const targetSentence = audioSentenceIndex;
-        if (targetSentence !== currentSentence) {
-          console.log('Auto-scrolling to paragraph:', targetSentence, 'from', currentSentence);
-          setCurrentSentence(targetSentence);
-          scrollToSentence(targetSentence, true); // Use smooth animation for auto-scroll
+        const targetParagraph = audioSentenceIndex;
+        if (targetParagraph !== currentSentence) {
+          console.log('Auto-scrolling to paragraph:', targetParagraph);
+          setCurrentSentence(targetParagraph);
+          scrollToParagraph(targetParagraph, true);
         }
       } else {
-        console.log('Skipping auto-scroll - manual mode active');
+        console.log('Manual scroll active - skipping auto-scroll');
       }
-    }, 100); // Check every 100ms for smooth sync
+    }, 100); // Check every 100ms for smooth auto-scroll
 
     return () => clearInterval(checkInterval);
   }, [playing, timings, sentences.length, audioSentenceIndex, currentSentence, manualScroll]);
@@ -111,17 +113,22 @@ export function ReelReader({
   const scrollToSentence = (index: number, animated = true) => {
     if (scrollViewRef.current && index >= 0 && index < sentences.length) {
       const sentenceHeight = windowHeight / VISIBLE_SENTENCES;
-      // Calculate the target scroll position to center the current sentence
       const targetY = (index * sentenceHeight) - (windowHeight / 2) + (sentenceHeight / 2);
-
       const maxY = Math.max(0, (sentences.length * sentenceHeight) - windowHeight);
       const finalY = Math.max(0, Math.min(targetY, maxY));
-
       console.log('Scrolling to paragraph', index, 'at Y:', finalY);
-      scrollViewRef.current.scrollTo({
-        y: finalY,
-        animated,
-      });
+      scrollViewRef.current.scrollTo({ y: finalY, animated });
+    }
+  };
+
+  const scrollToParagraph = (index: number, animated = true) => {
+    if (scrollViewRef.current && index >= 0 && index < sentences.length) {
+      // For continuous page, position current paragraph in upper third
+      const paragraphHeight = fontSize * 2.4;
+      const targetY = (index * paragraphHeight) - (windowHeight * 0.3);
+      const finalY = Math.max(0, targetY);
+      console.log('Auto-scrolling to paragraph', index, 'at Y:', finalY);
+      scrollViewRef.current.scrollTo({ y: finalY, animated });
     }
   };
 
@@ -150,58 +157,34 @@ export function ReelReader({
         scrollEventThrottle={100}
         decelerationRate="normal"
         bounces={true}
-        nestedScrollEnabled
       >
-        {sentences.map((sentence, index) => {
-          const isCurrent = index === currentSentence;
+        <View style={styles.contentContainer}>
+          {sentences.map((sentence, index) => {
+            const isCurrent = index === currentSentence;
 
-          return (
-            <View
-              key={index}
-              style={[
-                styles.sentenceItem,
-                {
-                  minHeight: Math.max(windowHeight / VISIBLE_SENTENCES, 80),
-                  backgroundColor: isCurrent ? colors.bg : colors.bg,
-                  paddingVertical: 6,
-                  marginVertical: 1,
-                  paddingHorizontal: 24,
-                }
-              ]}
-            >
-              <Pressable
-                style={styles.sentencePressable}
-                onPress={() => {
-                  console.log('Pressed paragraph:', index);
-                  if (index === currentSentence) {
-                    onPlayPause();
-                  } else {
-                    scrollToSentence(index);
+            return (
+              <Text
+                key={index}
+                style={[
+                  styles.sentenceText,
+                  {
+                    fontSize: fontSize,
+                    fontWeight: isCurrent ? '700' : '400',
+                    color: isCurrent ? colors.accent : colors.fg,
+                    lineHeight: fontSize * 1.6,
+                    marginBottom: fontSize * 0.8,
+                    opacity: isCurrent ? 1 : (index > currentSentence ? 0.3 : 0.7),
+                    backgroundColor: isCurrent ? colors.accent + '10' : 'transparent',
+                    padding: isCurrent ? 12 : 0,
+                    borderRadius: isCurrent ? 6 : 0,
                   }
-                }}
+                ]}
               >
-                <Text
-                  style={[
-                    styles.sentenceText,
-                    {
-                      fontSize: fontSize,
-                      fontWeight: '400',
-                      color: colors.fg,
-                      lineHeight: fontSize * 1.6,
-                    }
-                  ]}
-                >
-                  {sentence}
-                </Text>
-                {isCurrent && (
-                  <View style={styles.currentIndicator}>
-                    <View style={[styles.indicatorDot, { backgroundColor: colors.accent }]} />
-                  </View>
-                )}
-              </Pressable>
-            </View>
-          );
-        })}
+                {sentence}
+              </Text>
+            );
+          })}
+        </View>
       </ScrollView>
 
       {/* Controls Overlay */}
@@ -261,29 +244,14 @@ function makeStyles(colors: Palette, fontSize: number) {
     scrollView: {
       flex: 1,
     },
-    sentenceItem: {
-      justifyContent: 'center',
-      paddingVertical: 4,
-      paddingHorizontal: 24,
-      marginVertical: 0,
-    },
-    sentencePressable: {
-      width: '100%',
+    contentContainer: {
+      padding: 20,
+      paddingBottom: 200,
     },
     sentenceText: {
       fontFamily: Fonts.display,
       textAlign: 'left',
       paddingHorizontal: 4,
-    },
-    currentIndicator: {
-      position: 'absolute',
-      left: 8,
-      top: 28,
-    },
-    indicatorDot: {
-      width: 4,
-      height: 4,
-      borderRadius: 2,
     },
     controls: {
       position: 'absolute',
