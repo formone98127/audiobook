@@ -45,6 +45,13 @@ export default function Bookshelf() {
     router.replace({ pathname: '/reader', params: { bookId: selectedBook, chapter: String(chapterIdx) } });
   }
 
+  function openReelReader(chapterIdx: number) {
+    if (!selectedBook) return;
+    setSelectedBook(null);
+    setManifest(null);
+    router.replace({ pathname: '/reel', params: { bookId: selectedBook, chapter: String(chapterIdx) } });
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]} edges={['top', 'bottom']}>
       <View style={styles.headerRow}>
@@ -85,9 +92,25 @@ export default function Bookshelf() {
             {error && <Text style={[styles.errorText, { color: colors.accent }]}>{error}</Text>}
             {manifest && (
               <ScrollView>
+                <View style={styles.chapterSectionHeader}>
+                  <Text style={[styles.chapterSectionTitle, { color: colors.muted }]}>Read with ReelReader</Text>
+                </View>
                 {manifest.chapters.map((c) => (
                   <Pressable
-                    key={c.index}
+                    key={`reel-${c.index}`}
+                    style={[styles.chapterRow, { backgroundColor: colors.bg }]}
+                    onPress={() => openReelReader(c.index)}
+                  >
+                    <Text style={[styles.chapterRowText, { color: colors.accent }]}>🎬 {c.title}</Text>
+                    <Text style={[styles.dim, { color: colors.muted }]}>{fmtTime(c.duration)}</Text>
+                  </Pressable>
+                ))}
+                <View style={styles.chapterSectionHeader}>
+                  <Text style={[styles.chapterSectionTitle, { color: colors.muted }]}>Read with Audio/RSVP</Text>
+                </View>
+                {manifest.chapters.map((c) => (
+                  <Pressable
+                    key={`audio-${c.index}`}
                     style={styles.chapterRow}
                     onPress={() => openChapter(c.index)}
                   >
@@ -123,6 +146,8 @@ const styles = StyleSheet.create({
   modalTitle: { fontFamily: Fonts.display, fontSize: 24, marginBottom: 12 },
   chapterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 8, borderRadius: 4, gap: 12 },
   chapterRowText: { fontFamily: Fonts.display, fontSize: 16, flex: 1 },
+  chapterSectionHeader: { marginTop: 8, marginBottom: 8 },
+  chapterSectionTitle: { fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 8 },
   dim: { fontFamily: Fonts.mono, fontSize: 12, letterSpacing: 0.6 },
   errorText: { fontSize: 14, textAlign: 'center', marginVertical: 12 },
 });
