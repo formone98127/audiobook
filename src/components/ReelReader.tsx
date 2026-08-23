@@ -26,7 +26,7 @@ type Props = {
   onQuickSettings?: () => void;
 };
 
-const VISIBLE_SENTENCES = 5; // Target visible paragraphs for continuous scrolling
+const VISIBLE_SENTENCES = 5; // Show 5 paragraphs for context, snap between them
 
 export function ReelReader({
   sentences,
@@ -96,19 +96,37 @@ export function ReelReader({
 
   const handleScroll = (event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
-    // Calculate approximate paragraph position based on index
-    const approxHeightPerParagraph = fontSize * 2.5; // Text height + spacing
-    const newParagraph = Math.floor(offsetY / approxHeightPerParagraph);
+    const paragraphHeight = fontSize * 2.4;
+    const currentParagraph = Math.round(offsetY / paragraphHeight);
 
-    console.log('Scroll event - offsetY:', offsetY.toFixed(1), 'approx height per paragraph:', approxHeightPerParagraph.toFixed(1), 'calculated paragraph:', newParagraph, 'current:', currentSentence);
+    // Only trigger if we're at a different paragraph and not just tiny scrolling
+    if (currentParagraph !== currentSentence && currentParagraph >= 0 && currentParagraph < sentences.length) {
+      console.log('Scroll gesture detected - moving from paragraph', currentSentence, 'to', currentParagraph);
 
-    if (newParagraph !== currentSentence && newParagraph >= 0 && newParagraph < sentences.length) {
-      console.log('Manual scroll detected - seeking audio to paragraph:', newParagraph);
-      setManualScroll(true);
-      setCurrentSentence(newParagraph);
-      onProgress(newParagraph);
-      onSeek(newParagraph); // This will make audio follow the scroll
+      // Determine scroll direction for better UX
+      const direction = currentParagraph > currentSentence ? 'next' : 'prev';
+      const targetParagraph = currentSentence + (direction === 'next' ? 1 : -1);
+
+      // Ensure target is within bounds
+      if (targetParagraph >= 0 && targetParagraph < sentences.length) {
+        setManualScroll(false);
+        setCurrentSentence(targetParagraph);
+        onProgress(targetParagraph);
+        onSeek(targetParagraph);
+        scrollToParagraph(targetParagraph, true);
+      }
     }
+  };
+
+  const handleScrollEnd = () => {
+    // Snap to the exact paragraph position when scroll ends
+    console.log('Scroll ended - snapping to paragraph:', currentSentence);
+    scrollToParagraph(currentSentence, true);
+  };
+
+  // Handle scroll begin for gesture detection
+  const handleScrollBegin = () => {
+    console.log('Scroll gesture began');
   };
 
   const scrollToSentence = (index: number, animated = true) => {
@@ -124,11 +142,11 @@ export function ReelReader({
 
   const scrollToParagraph = (index: number, animated = true) => {
     if (scrollViewRef.current && index >= 0 && index < sentences.length) {
-      // For continuous page, position current paragraph in upper third
-      const paragraphHeight = fontSize * 2.4;
-      const targetY = (index * paragraphHeight) - (windowHeight * 0.3);
+      // Snap to exact paragraph position for Reels-style behavior
+      const paragraphHeight = fontSize * 2.4; // Text + margin height
+      const targetY = index * paragraphHeight;
       const finalY = Math.max(0, targetY);
-      console.log('Auto-scrolling to paragraph', index, 'at Y:', finalY);
+      console.log('Snapping to paragraph', index, 'at Y:', finalY);
       scrollViewRef.current.scrollTo({ y: finalY, animated });
     }
   };
@@ -155,8 +173,10 @@ export function ReelReader({
         pagingEnabled={false}
         showsVerticalScrollIndicator={true}
         onScroll={handleScroll}
-        scrollEventThrottle={100}
-        decelerationRate="normal"
+        onScrollBeginDrag={handleScrollBegin}
+        onScrollEndDrag={handleScrollEnd}
+        scrollEventThrottle={16}
+        decelerationRate="fast"
         bounces={true}
       >
         <View style={styles.contentContainer}>
@@ -178,6 +198,7 @@ export function ReelReader({
                     backgroundColor: isCurrent ? colors.accent + '10' : 'transparent',
                     padding: isCurrent ? 12 : 0,
                     borderRadius: isCurrent ? 6 : 0,
+                    minHeight: fontSize * 1.6,
                   }
                 ]}
               >
