@@ -25,6 +25,8 @@ type Props = {
   onSeek: (sentenceIndex: number) => void;
 };
 
+const VISIBLE_SENTENCES = 5; // Show 5 sentences at once
+
 export function ReelReader({
   sentences,
   timings,
@@ -81,9 +83,20 @@ export function ReelReader({
     }
   }, [currentTime, currentSentence, timings, sentences.length]);
 
+  // Get visible sentences around current one
+  const visibleSentences = useMemo(() => {
+    const start = Math.max(0, currentSentence - Math.floor(VISIBLE_SENTENCES / 2));
+    const end = Math.min(sentences.length, start + VISIBLE_SENTENCES);
+    return sentences.slice(start, end).map((sentence, i) => ({
+      sentence,
+      index: start + i,
+      isCurrent: start + i === currentSentence,
+    }));
+  }, [currentSentence, sentences]);
+
   const handleScroll = (event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
-    const sentenceHeight = windowHeight;
+    const sentenceHeight = windowHeight / VISIBLE_SENTENCES;
     const newSentence = Math.round(offsetY / sentenceHeight);
 
     if (newSentence !== currentSentence && newSentence >= 0 && newSentence < sentences.length) {
@@ -99,8 +112,9 @@ export function ReelReader({
 
   const scrollToSentence = (index: number, animated = true) => {
     if (scrollViewRef.current && index >= 0 && index < sentences.length) {
+      const sentenceHeight = windowHeight / VISIBLE_SENTENCES;
       scrollViewRef.current.scrollTo({
-        y: index * windowHeight,
+        y: index * sentenceHeight,
         animated,
       });
     }
@@ -120,6 +134,62 @@ export function ReelReader({
     }
   };
 
+  const renderSentence = (item: { sentence: string; index: number; isCurrent: boolean }) => {
+    const opacity = item.isCurrent ? 1 : 0.3;
+    const scale = item.isCurrent ? 1.1 : 0.9;
+    const fontWeight = item.isCurrent ? '700' : '400';
+
+    return (
+      <View
+        key={item.index}
+        style={[
+          styles.sentenceItem,
+          {
+            height: windowHeight / VISIBLE_SENTENCES,
+            opacity,
+          }
+        ]}
+      >
+        <Pressable
+          style={styles.sentencePressable}
+          onPress={() => {
+            if (item.index === currentSentence) {
+              onPlayPause();
+            } else {
+              scrollToSentence(item.index);
+            }
+          }}
+        >
+          <Text
+            style={[
+              styles.sentenceText,
+              {
+                fontSize: item.isCurrent ? fontSize * scale : fontSize * 0.9,
+                fontWeight: fontWeight as any,
+                transform: [{ scale: item.isCurrent ? 1.05 : 0.95 }],
+              }
+            ]}
+          >
+            {item.sentence}
+          </Text>
+          {item.isCurrent && (
+            <View style={styles.progressBar}>
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    backgroundColor: colors.accent,
+                    width: `${progressRef.current * 100}%`,
+                  },
+                ]}
+              />
+            </View>
+          )}
+        </Pressable>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -129,43 +199,64 @@ export function ReelReader({
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        snapToInterval={windowHeight}
+        snapToInterval={windowHeight / VISIBLE_SENTENCES}
         decelerationRate="fast"
       >
-        {sentences.map((sentence, index) => (
-          <View
-            key={index}
-            style={[styles.sentenceCard, { height: windowHeight }]}
-          >
-            <Pressable
-              style={styles.sentenceContainer}
-              onPress={() => {
-                if (index === currentSentence) {
-                  onPlayPause();
-                } else {
-                  scrollToSentence(index);
+        {sentences.map((sentence, index) => {
+          const isCurrent = index === currentSentence;
+          const opacity = isCurrent ? 1 : 0.3;
+          const scale = isCurrent ? 1.1 : 0.9;
+
+          return (
+            <View
+              key={index}
+              style={[
+                styles.sentenceItem,
+                {
+                  height: windowHeight / VISIBLE_SENTENCES,
+                  opacity,
                 }
-              }}
+              ]}
             >
-              <Text style={[styles.sentenceText, { fontSize }]}>
-                {sentence}
-              </Text>
-              {index === currentSentence && (
-                <View style={styles.progressBar}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        backgroundColor: colors.accent,
-                        width: `${progressRef.current * 100}%`,
-                      },
-                    ]}
-                  />
-                </View>
-              )}
-            </Pressable>
-          </View>
-        ))}
+              <Pressable
+                style={styles.sentencePressable}
+                onPress={() => {
+                  if (index === currentSentence) {
+                    onPlayPause();
+                  } else {
+                    scrollToSentence(index);
+                  }
+                }}
+              >
+                <Text
+                  style={[
+                    styles.sentenceText,
+                    {
+                      fontSize: isCurrent ? fontSize * 1.1 : fontSize * 0.9,
+                      fontWeight: isCurrent ? '700' : '400',
+                      transform: [{ scale: isCurrent ? 1.02 : 0.98 }],
+                    }
+                  ]}
+                >
+                  {sentence}
+                </Text>
+                {isCurrent && (
+                  <View style={styles.progressBar}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          backgroundColor: colors.accent,
+                          width: `${progressRef.current * 100}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                )}
+              </Pressable>
+            </View>
+          );
+        })}
       </ScrollView>
 
       {/* Controls Overlay */}
@@ -216,34 +307,33 @@ function makeStyles(colors: Palette, fontSize: number) {
     scrollView: {
       flex: 1,
     },
-    sentenceCard: {
+    sentenceItem: {
       justifyContent: 'center',
       alignItems: 'center',
-      padding: 24,
+      padding: 16,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
-    sentenceContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
+    sentencePressable: {
       width: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     sentenceText: {
       fontFamily: Fonts.display,
       color: colors.fg,
       textAlign: 'center',
-      lineHeight: fontSize * 1.6,
-      paddingHorizontal: 20,
+      lineHeight: fontSize * 1.5,
+      paddingHorizontal: 24,
     },
     progressBar: {
       position: 'absolute',
-      bottom: 40,
-      left: 20,
-      right: 20,
-      height: 3,
+      bottom: -8,
+      left: 32,
+      right: 32,
+      height: 2,
       backgroundColor: colors.border,
-      borderRadius: 2,
+      borderRadius: 1,
       overflow: 'hidden',
     },
     progressFill: {
