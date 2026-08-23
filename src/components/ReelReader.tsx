@@ -45,29 +45,28 @@ export function ReelReader({
   const styles = useMemo(() => makeStyles(colors, fontSize), [colors, fontSize]);
 
   const [currentSentence, setCurrentSentence] = useState(0);
-  const [manualScroll, setManualScroll] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const currentIndexRef = useRef(0);
 
-  // Calculate which sentence should be active based on audio timings
-  const audioSentenceIndex = useMemo(() => {
+  // Calculate which paragraph should be active based on audio timings
+  const audioParagraphIndex = useMemo(() => {
     if (!timings || sentences.length === 0) return 0;
     const sentenceIdx = timings.sentenceAt(currentTime);
-    const result = Math.max(0, Math.min(sentences.length - 1, sentenceIdx >= 0 ? sentenceIdx : 0));
-    console.log('audioSentenceIndex calculation - currentTime:', currentTime.toFixed(2), 'sentenceIdx:', sentenceIdx, 'result:', result, 'sentences.length:', sentences.length);
+    // Convert sentence index to paragraph index (approx 3 sentences per paragraph)
+    const paragraphIdx = sentenceIdx >= 0 ? Math.floor(sentenceIdx / 3) : 0;
+    const result = Math.max(0, Math.min(sentences.length - 1, paragraphIdx));
+    console.log('audioParagraphIndex calculation - currentTime:', currentTime.toFixed(2), 'sentenceIdx:', sentenceIdx, 'paragraphIdx:', paragraphIdx, 'result:', result, 'sentences.length:', sentences.length);
     return result;
   }, [timings, currentTime, sentences.length]);
 
-  // Force update when audioSentenceIndex changes - but respect manual scroll
+  // Force update when audioParagraphIndex changes
   useEffect(() => {
-    if (audioSentenceIndex !== currentSentence && !manualScroll) {
-      console.log('Forcing currentSentence update from', currentSentence, 'to', audioSentenceIndex);
-      setCurrentSentence(audioSentenceIndex);
-      scrollToParagraph(audioSentenceIndex, true);
-    } else if (manualScroll) {
-      console.log('Skipping forced update - manual mode active, audio will follow scroll');
+    if (audioParagraphIndex !== currentSentence) {
+      console.log('Auto-scrolling to follow audio:', currentSentence, '->', audioParagraphIndex);
+      setCurrentSentence(audioParagraphIndex);
+      scrollToParagraph(audioParagraphIndex, true);
     }
-  }, [audioSentenceIndex, manualScroll]);
+  }, [audioParagraphIndex]);
 
   currentIndexRef.current = currentSentence;
 
@@ -76,19 +75,16 @@ export function ReelReader({
     if (!playing || !timings || sentences.length === 0) return;
 
     const checkInterval = setInterval(() => {
-      // Only auto-scroll if not in manual mode
-      if (!manualScroll) {
-        const targetParagraph = audioSentenceIndex;
-        if (targetParagraph !== currentSentence) {
-          console.log('Auto-scrolling to paragraph:', targetParagraph);
-          setCurrentSentence(targetParagraph);
-          scrollToParagraph(targetParagraph, false); // Faster snap for auto-scroll
-        }
+      const targetParagraph = audioParagraphIndex;
+      if (targetParagraph !== currentSentence) {
+        console.log('Auto-scrolling to paragraph:', targetParagraph);
+        setCurrentSentence(targetParagraph);
+        scrollToParagraph(targetParagraph, false); // Faster snap for auto-scroll
       }
     }, 200); // Reduced from 100ms to 200ms for better performance
 
     return () => clearInterval(checkInterval);
-  }, [playing, timings, sentences.length, audioSentenceIndex, currentSentence, manualScroll]);
+  }, [playing, timings, sentences.length, audioParagraphIndex, currentSentence]);
 
   const handleScroll = (event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;

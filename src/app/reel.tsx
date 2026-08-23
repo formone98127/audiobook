@@ -168,7 +168,7 @@ export default function ReelScreen() {
         }
       }
     }
-  }, [t, timings, playing, sentenceIndex, chapterIdx, bookId]);
+  }, [t, timings, playing, paragraphs.length, chapterIdx, bookId]);
 
   // Auto-save position
   useEffect(() => {
