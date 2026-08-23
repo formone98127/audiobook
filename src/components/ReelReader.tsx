@@ -51,36 +51,34 @@ export function ReelReader({
   const audioSentenceIndex = useMemo(() => {
     if (!timings || sentences.length === 0) return 0;
     const sentenceIdx = timings.sentenceAt(currentTime);
-    return Math.max(0, Math.min(sentences.length - 1, sentenceIdx >= 0 ? sentenceIdx : 0));
+    const result = Math.max(0, Math.min(sentences.length - 1, sentenceIdx >= 0 ? sentenceIdx : 0));
+    console.log('audioSentenceIndex calculation - currentTime:', currentTime.toFixed(2), 'sentenceIdx:', sentenceIdx, 'result:', result, 'sentences.length:', sentences.length);
+    return result;
   }, [timings, currentTime, sentences.length]);
+
+  // Force update when audioSentenceIndex changes
+  useEffect(() => {
+    if (audioSentenceIndex !== currentSentence) {
+      console.log('Forcing currentSentence update from', currentSentence, 'to', audioSentenceIndex);
+      setCurrentSentence(audioSentenceIndex);
+      scrollToSentence(audioSentenceIndex, true);
+    }
+  }, [audioSentenceIndex]);
 
   currentIndexRef.current = currentSentence;
 
-  // Sync with audio when not manually scrolling
-  useEffect(() => {
-    if (!manualScroll && timings && sentences.length > 0 && audioSentenceIndex !== currentSentence) {
-      const targetSentence = audioSentenceIndex;
-      setCurrentSentence(targetSentence);
-      scrollToSentence(targetSentence, true); // Use smooth animation for auto-scroll
-
-      // Clear manual scroll mode more quickly for better audio sync
-      if (manualScroll) {
-        setTimeout(() => setManualScroll(false), 500);
-      }
-    }
-  }, [manualScroll, timings, sentences.length, audioSentenceIndex, currentSentence]);
-
-  // Enhanced audio sync - check more frequently
+  // Enhanced audio sync - check more frequently and force scroll
   useEffect(() => {
     if (!playing || !timings || sentences.length === 0) return;
 
     const checkInterval = setInterval(() => {
       const targetSentence = audioSentenceIndex;
       if (targetSentence !== currentSentence && !manualScroll) {
+        console.log('Auto-scrolling to paragraph:', targetSentence, 'from', currentSentence);
         setCurrentSentence(targetSentence);
-        scrollToSentence(targetSentence, false); // Quick snap for audio sync
+        scrollToSentence(targetSentence, true); // Use smooth animation for auto-scroll
       }
-    }, 100); // Check every 100ms for smoother sync
+    }, 50); // Check every 50ms for even smoother sync
 
     return () => clearInterval(checkInterval);
   }, [playing, timings, sentences.length, audioSentenceIndex, currentSentence, manualScroll]);
@@ -107,8 +105,12 @@ export function ReelReader({
       // Calculate the target scroll position to center the current sentence
       const targetY = (index * sentenceHeight) - (windowHeight / 2) + (sentenceHeight / 2);
 
+      const maxY = Math.max(0, (sentences.length * sentenceHeight) - windowHeight);
+      const finalY = Math.max(0, Math.min(targetY, maxY));
+
+      console.log('Scrolling to paragraph', index, 'at Y:', finalY);
       scrollViewRef.current.scrollTo({
-        y: Math.max(0, Math.min(targetY, (sentences.length * sentenceHeight) - windowHeight)),
+        y: finalY,
         animated,
       });
     }

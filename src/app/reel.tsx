@@ -137,33 +137,6 @@ export default function ReelScreen() {
   const duration = player.duration || 0;
   const progress = duration > 0 ? t / duration : 0;
 
-  // Auto-scroll effect for audio sync - paragraph-based
-  useEffect(() => {
-    if (!timings || !playing) return;
-
-    const targetSentenceIndex = timings.sentenceAt(t);
-    if (targetSentenceIndex >= 0) {
-      // Convert sentence index to paragraph index (approx 3 sentences per paragraph)
-      const targetParaIndex = Math.floor(targetSentenceIndex / 3);
-      if (targetParaIndex !== sentenceIndex) {
-        setSentenceIndex(targetParaIndex);
-        if (bookId) {
-          saveReelPosition(bookId, { chapterIdx, sentenceIndex: targetParaIndex });
-        }
-      }
-    }
-  }, [t, timings, playing, sentenceIndex, chapterIdx, bookId]);
-
-  // Auto-save position
-  useEffect(() => {
-    if (!bookId || !playing || !audioReady) return;
-    const interval = setInterval(() => {
-      saveReelPosition(bookId, { chapterIdx, sentenceIndex });
-      savePosition(bookId, { chapterIdx, currentTime: player.currentTime });
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [bookId, chapterIdx, sentenceIndex, playing, audioReady, player]);
-
   const chapter: BookChapter | undefined = book?.text.chapters.find((c) => c.index === chapterIdx);
 
   const paragraphs = useMemo(() => {
@@ -174,6 +147,37 @@ export default function ReelScreen() {
     }
     return paras;
   }, [chapter]);
+
+  // Auto-scroll effect for audio sync - paragraph-based with logging
+  useEffect(() => {
+    if (!timings || !playing || paragraphs.length === 0) return;
+
+    const targetSentenceIndex = timings.sentenceAt(t);
+    if (targetSentenceIndex >= 0) {
+      // Convert sentence index to paragraph index (approx 3 sentences per paragraph)
+      const targetParaIndex = Math.floor(targetSentenceIndex / 3);
+
+      console.log('Audio sync - current t:', t.toFixed(2), 'targetSentenceIndex:', targetSentenceIndex, 'targetParaIndex:', targetParaIndex, 'current sentenceIndex:', sentenceIndex, 'paragraphs.length:', paragraphs.length);
+
+      if (targetParaIndex !== sentenceIndex && targetParaIndex < paragraphs.length) {
+        console.log('Updating sentenceIndex from', sentenceIndex, 'to', targetParaIndex);
+        setSentenceIndex(targetParaIndex);
+        if (bookId) {
+          saveReelPosition(bookId, { chapterIdx, sentenceIndex: targetParaIndex });
+        }
+      }
+    }
+  }, [t, timings, playing, sentenceIndex, chapterIdx, bookId, paragraphs.length]);
+
+  // Auto-save position
+  useEffect(() => {
+    if (!bookId || !playing || !audioReady) return;
+    const interval = setInterval(() => {
+      saveReelPosition(bookId, { chapterIdx, sentenceIndex });
+      savePosition(bookId, { chapterIdx, currentTime: player.currentTime });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [bookId, chapterIdx, sentenceIndex, playing, audioReady, player]);
 
   const handleProgress = (idx: number) => {
     setSentenceIndex(idx);
