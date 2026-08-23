@@ -52,6 +52,9 @@ export function ReelReader({
     }
   }, [paragraphHeight, sentences.length]);
 
+  // Track pending seek to execute on scroll end
+  const pendingSeekRef = useRef<number | null>(null);
+
   // Handle scroll events - only when user manually scrolls
   const handleScroll = useCallback((event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
@@ -60,11 +63,20 @@ export function ReelReader({
     if (newParagraph !== currentSentence && newParagraph >= 0 && newParagraph < sentences.length) {
       console.log('Manual scroll to paragraph:', newParagraph);
       manualScrollRef.current = true; // Mark as user-initiated
+      pendingSeekRef.current = newParagraph; // Store for seek on scroll end
       setCurrentSentence(newParagraph);
       onProgress(newParagraph);
-      onSeek(newParagraph);
     }
-  }, [currentSentence, paragraphHeight, sentences.length, onProgress, onSeek]);
+  }, [currentSentence, paragraphHeight, sentences.length, onProgress]);
+
+  // Seek audio when scrolling ends
+  const handleScrollEnd = useCallback(() => {
+    if (pendingSeekRef.current !== null) {
+      console.log('Scroll ended - seeking audio to paragraph:', pendingSeekRef.current);
+      onSeek(pendingSeekRef.current);
+      pendingSeekRef.current = null;
+    }
+  }, [onSeek]);
 
   // Sync local state with prop changes (from parent audio sync)
   useEffect(() => {
@@ -106,6 +118,8 @@ export function ReelReader({
         pagingEnabled={false}
         showsVerticalScrollIndicator={true}
         onScroll={handleScroll}
+        onScrollEndDrag={handleScrollEnd}
+        onMomentumScrollEnd={handleScrollEnd}
         scrollEventThrottle={100} // Throttle to reduce calls
         decelerationRate="fast"
         bounces={true}
