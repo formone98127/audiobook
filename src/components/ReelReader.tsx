@@ -46,7 +46,6 @@ export function ReelReader({
   const [manualScroll, setManualScroll] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const currentIndexRef = useRef(0);
-  const progressRef = useRef(0);
 
   // Calculate which sentence should be active based on audio timings
   const audioSentenceIndex = useMemo(() => {
@@ -85,21 +84,6 @@ export function ReelReader({
 
     return () => clearInterval(checkInterval);
   }, [playing, timings, sentences.length, audioSentenceIndex, currentSentence, manualScroll]);
-
-  // Update progress bar
-  useEffect(() => {
-    if (timings && currentSentence >= 0 && currentSentence < sentences.length) {
-      const sentenceStart = timings.sentenceStartOf(currentSentence);
-      const sentenceEnd = timings.sentenceStartOf(currentSentence + 1);
-      const duration = sentenceEnd - sentenceStart;
-      const elapsed = currentTime - sentenceStart;
-
-      if (duration > 0) {
-        const progress = Math.max(0, Math.min(1, elapsed / duration));
-        progressRef.current = progress;
-      }
-    }
-  }, [currentTime, currentSentence, timings, sentences.length]);
 
   const handleScroll = (event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
@@ -158,11 +142,6 @@ export function ReelReader({
       >
         {sentences.map((sentence, index) => {
           const isCurrent = index === currentSentence;
-          const opacity = isCurrent ? 1 : 0.3;
-          const scale = isCurrent ? 1.2 : 0.9;
-          const backgroundColor = isCurrent ? colors.accent + '20' : 'transparent';
-          const borderColor = isCurrent ? colors.accent : 'transparent';
-          const sentenceHeight = Math.max(windowHeight / VISIBLE_SENTENCES, 120); // Minimum height for paragraph readability
 
           return (
             <View
@@ -170,14 +149,11 @@ export function ReelReader({
               style={[
                 styles.sentenceItem,
                 {
-                  minHeight: sentenceHeight,
-                  opacity,
-                  backgroundColor,
-                  borderWidth: isCurrent ? 2 : 0,
-                  borderColor,
-                  borderRadius: isCurrent ? 10 : 0,
-                  paddingVertical: isCurrent ? 32 : 20,
-                  marginVertical: isCurrent ? 12 : 6,
+                  minHeight: windowHeight / VISIBLE_SENTENCES,
+                  backgroundColor: isCurrent ? colors.bg : colors.bg,
+                  paddingVertical: 24,
+                  marginVertical: 4,
+                  paddingHorizontal: 24,
                 }
               ]}
             >
@@ -195,37 +171,19 @@ export function ReelReader({
                   style={[
                     styles.sentenceText,
                     {
-                      fontSize: isCurrent ? Math.min(fontSize * 1.3, 36) : Math.max(fontSize * 0.9, 16),
-                      fontWeight: isCurrent ? '700' : '400',
-                      color: isCurrent ? colors.accent : colors.fg,
-                      lineHeight: isCurrent ? fontSize * 1.8 : fontSize * 1.6,
-                      letterSpacing: isCurrent ? 0.8 : 0.4,
-                      textShadowColor: isCurrent ? colors.accent : 'transparent',
-                      textShadowOffset: isCurrent ? { width: 0, height: 0 } : undefined,
-                      textShadowRadius: isCurrent ? 8 : 0,
-                      opacity: isCurrent ? 1 : 0.7,
+                      fontSize: fontSize,
+                      fontWeight: '400',
+                      color: colors.fg,
+                      lineHeight: fontSize * 1.6,
                     }
                   ]}
                 >
                   {sentence}
                 </Text>
                 {isCurrent && (
-                  <>
-                    <View style={styles.progressBar}>
-                      <View
-                        style={[
-                          styles.progressFill,
-                          {
-                            backgroundColor: colors.accent,
-                            width: `${progressRef.current * 100}%`,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <View style={styles.glowEffect}>
-                      <View style={[styles.glow, { backgroundColor: colors.accent }]} />
-                    </View>
-                  </>
+                  <View style={styles.currentIndicator}>
+                    <View style={[styles.indicatorDot, { backgroundColor: colors.accent }]} />
+                  </View>
                 )}
               </Pressable>
             </View>
@@ -283,50 +241,28 @@ function makeStyles(colors: Palette, fontSize: number) {
     },
     sentenceItem: {
       justifyContent: 'center',
-      alignItems: 'center',
       padding: 24,
-      marginHorizontal: 20,
-      marginVertical: 6,
+      marginHorizontal: 16,
+      marginVertical: 4,
+      borderRadius: 8,
     },
     sentencePressable: {
       width: '100%',
-      alignItems: 'center',
-      justifyContent: 'center',
     },
     sentenceText: {
       fontFamily: Fonts.display,
       textAlign: 'left',
-      paddingHorizontal: 28,
-      textAlignVertical: 'center',
+      paddingHorizontal: 4,
     },
-    progressBar: {
+    currentIndicator: {
       position: 'absolute',
-      bottom: -12,
-      left: 20,
-      right: 20,
+      left: 8,
+      top: 28,
+    },
+    indicatorDot: {
+      width: 4,
       height: 4,
-      backgroundColor: colors.border,
       borderRadius: 2,
-      overflow: 'hidden',
-    },
-    progressFill: {
-      height: '100%',
-    },
-    glowEffect: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      alignItems: 'center',
-      justifyContent: 'center',
-      pointerEvents: 'none',
-    },
-    glow: {
-      width: '80%',
-      height: '80%',
-      borderRadius: 20,
-      opacity: 0.1,
     },
     controls: {
       position: 'absolute',
