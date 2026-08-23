@@ -63,9 +63,9 @@ export function ReelReader({
     if (audioSentenceIndex !== currentSentence && !manualScroll) {
       console.log('Forcing currentSentence update from', currentSentence, 'to', audioSentenceIndex);
       setCurrentSentence(audioSentenceIndex);
-      scrollToSentence(audioSentenceIndex, true);
+      scrollToParagraph(audioSentenceIndex, true);
     } else if (manualScroll) {
-      console.log('Skipping forced update - manual mode active');
+      console.log('Skipping forced update - manual mode active, audio will follow scroll');
     }
   }, [audioSentenceIndex, manualScroll]);
 
@@ -96,17 +96,18 @@ export function ReelReader({
 
   const handleScroll = (event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
-    const sentenceHeight = windowHeight / VISIBLE_SENTENCES;
-    const newSentence = Math.round(offsetY / sentenceHeight);
+    // Calculate approximate paragraph position based on index
+    const approxHeightPerParagraph = fontSize * 2.5; // Text height + spacing
+    const newParagraph = Math.floor(offsetY / approxHeightPerParagraph);
 
-    console.log('Scroll event - offsetY:', offsetY, 'calculated sentence:', newSentence, 'current:', currentSentence);
+    console.log('Scroll event - offsetY:', offsetY.toFixed(1), 'approx height per paragraph:', approxHeightPerParagraph.toFixed(1), 'calculated paragraph:', newParagraph, 'current:', currentSentence);
 
-    if (newSentence !== currentSentence && newSentence >= 0 && newSentence < sentences.length) {
-      console.log('Manual scroll detected - moving to paragraph:', newSentence);
+    if (newParagraph !== currentSentence && newParagraph >= 0 && newParagraph < sentences.length) {
+      console.log('Manual scroll detected - seeking audio to paragraph:', newParagraph);
       setManualScroll(true);
-      setCurrentSentence(newSentence);
-      onProgress(newSentence);
-      onSeek(newSentence);
+      setCurrentSentence(newParagraph);
+      onProgress(newParagraph);
+      onSeek(newParagraph); // This will make audio follow the scroll
     }
   };
 

@@ -160,7 +160,7 @@ export default function ReelScreen() {
 
       console.log('Audio sync - current t:', t.toFixed(2), 'targetSentenceIndex:', targetSentenceIndex, 'targetParaIndex:', targetParaIndex, 'current sentenceIndex:', sentenceIndex, 'paragraphs.length:', paragraphs.length);
 
-      if (targetParaIndex !== sentenceIndex && targetParaIndex < paragraphs.length) {
+      if (targetParaIndex !== sentenceIndex) {
         console.log('Updating sentenceIndex from', sentenceIndex, 'to', targetParaIndex);
         setSentenceIndex(targetParaIndex);
         if (bookId) {
@@ -168,7 +168,7 @@ export default function ReelScreen() {
         }
       }
     }
-  }, [t, timings, playing, sentenceIndex, chapterIdx, bookId, paragraphs.length]);
+  }, [t, timings, playing, sentenceIndex, chapterIdx, bookId]);
 
   // Auto-save position
   useEffect(() => {
@@ -189,11 +189,21 @@ export default function ReelScreen() {
 
   const handleSeek = (idx: number) => {
     if (!timings) return;
+    console.log('Seeking audio to paragraph:', idx);
     // Find which sentence corresponds to this paragraph and seek there
     const currentParaSentenceStart = idx * 3; // Approximate: 3 sentences per paragraph
     const seek = timings.timeAtFlatWord(currentParaSentenceStart);
     if (seek != null) {
+      console.log('Seeking audio to time:', seek, 'for paragraph', idx);
       player.seekTo(seek);
+      // Auto-resume audio sync after user scrolls
+      setTimeout(() => {
+        if (playing) {
+          player.play();
+        }
+      }, 200);
+    } else {
+      console.log('Could not find seek time for paragraph:', idx);
     }
   };
 
